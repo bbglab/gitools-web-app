@@ -139,10 +139,13 @@ function uniqueValues(vec: Vector): string[] {
 
 // ── Value-filter helpers ──────────────────────────────────────────────────────
 
-function rowAgg(dataset: Dataset, dr: number, series: number, agg: ValueFilterRule['aggregate']): number {
-  const n = dataset.colCount
+// cols: the column indices to aggregate over (pass displayColOrder so row filters
+// see only the columns that survived the column filter)
+function rowAggOver(dataset: Dataset, dr: number, series: number, agg: ValueFilterRule['aggregate'], cols: number[]): number {
+  const n = cols.length
+  if (n === 0) return agg === 'pct_empty' ? 100 : NaN
   let sum = 0, cnt = 0, mn = Infinity, mx = -Infinity, ne = 0
-  for (let dc = 0; dc < n; dc++) {
+  for (const dc of cols) {
     const v = dataset.getValue(dr, dc, series)
     if (isNaN(v)) { ne++; continue }
     sum += v; cnt++
@@ -152,7 +155,7 @@ function rowAgg(dataset: Dataset, dr: number, series: number, agg: ValueFilterRu
   if (agg === 'mean')      return cnt > 0 ? sum / cnt : NaN
   if (agg === 'min')       return mn < Infinity ? mn : NaN
   if (agg === 'max')       return mx > -Infinity ? mx : NaN
-  return n > 0 ? (ne / n) * 100 : 0  // pct_empty
+  return (ne / n) * 100  // pct_empty
 }
 
 function colAgg(dataset: Dataset, dc: number, series: number, agg: ValueFilterRule['aggregate']): number {
@@ -243,37 +246,8 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   const workerRef = useRef<Worker | null>(null)
 
   // ── Derived: filtered display orders ─────────────────────────────────────────
-  const displayRowOrder = useMemo(() => {
-    let order = rowOrder
-
-    if (rowFilters.size > 0) {
-      order = order.filter(dr => {
-        for (const [field, allowed] of rowFilters) {
-          const vec = dataset.rowMetadata.getVector(field)
-          if (!vec) continue
-          const val = vec.values[dr]
-          if (val == null || !allowed.has(String(val))) return false
-        }
-        return true
-      })
-    }
-
-    for (const rule of rowValueFilters) {
-      order = order.filter(dr => passesOp(rowAgg(dataset, dr, rule.series, rule.aggregate), rule.operator, rule.threshold))
-    }
-
-    if (rowIdFilter) {
-      const idVec = dataset.rowMetadata.getVector('id')
-      const { ids, mode } = rowIdFilter
-      order = order.filter(dr => {
-        const id = String(idVec?.values[dr] ?? '')
-        return mode === 'include' ? ids.has(id) : !ids.has(id)
-      })
-    }
-
-    return order
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rowOrder, rowFilters, rowValueFilters, rowIdFilter, dataset, annotVersion])
+  // Column filter runs first (on all rows); row filter then uses the resulting
+  // column set so that "% empty" for rows is evaluated only over visible columns.
 
   const displayColOrder = useMemo(() => {
     let order = colOrder
@@ -306,6 +280,42 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
     return order
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colOrder, colFilters, colValueFilters, colIdFilter, dataset, annotVersion])
+
+  // Row filter runs after column filter — row value aggregates use displayColOrder
+  // so that "% empty" is computed only over the columns that are still visible.
+  const displayRowOrder = useMemo(() => {
+    let order = rowOrder
+
+    if (rowFilters.size > 0) {
+      order = order.filter(dr => {
+        for (const [field, allowed] of rowFilters) {
+          const vec = dataset.rowMetadata.getVector(field)
+          if (!vec) continue
+          const val = vec.values[dr]
+          if (val == null || !allowed.has(String(val))) return false
+        }
+        return true
+      })
+    }
+
+    for (const rule of rowValueFilters) {
+      order = order.filter(dr =>
+        passesOp(rowAggOver(dataset, dr, rule.series, rule.aggregate, displayColOrder), rule.operator, rule.threshold)
+      )
+    }
+
+    if (rowIdFilter) {
+      const idVec = dataset.rowMetadata.getVector('id')
+      const { ids, mode } = rowIdFilter
+      order = order.filter(dr => {
+        const id = String(idVec?.values[dr] ?? '')
+        return mode === 'include' ? ids.has(id) : !ids.has(id)
+      })
+    }
+
+    return order
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowOrder, rowFilters, rowValueFilters, rowIdFilter, displayColOrder, dataset, annotVersion])
 
   const colorRange = useMemo(
     () => computeColorRange(dataset, activeSeries),
