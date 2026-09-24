@@ -122,10 +122,13 @@ export function uploadDataTexture(
   rowOrder?: number[],
   colOrder?: number[],
 ): DataTextureResult {
-  const src     = dataset.getSeriesArray(series)
-  const nCols   = dataset.colCount
-  const nRows   = dataset.rowCount
-  const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
+  const src      = dataset.getSeriesArray(series)
+  const srcStride = dataset.colCount          // stride in the source flat array
+  // Use the filtered counts for texture layout so the tiling tile width equals
+  // u_dataSize.x — mismatching these caused wrong texture lookups when K > 1.
+  const nRows    = rowOrder ? rowOrder.length : dataset.rowCount
+  const nCols    = colOrder ? colOrder.length : dataset.colCount
+  const maxSize  = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
 
   // K = how many data rows fit side-by-side to keep texH ≤ maxSize
   const K    = Math.max(1, Math.ceil(nRows / maxSize))
@@ -145,7 +148,7 @@ export function uploadDataTexture(
     const dataR    = rowOrder ? rowOrder[r] : r
     const texRow   = Math.floor(r / K)
     const tileSlot = r % K
-    const srcBase  = dataR * nCols
+    const srcBase  = dataR * srcStride
     const dstBase  = texRow * texW + tileSlot * nCols
     for (let c = 0; c < nCols; c++) {
       const dataC = colOrder ? colOrder[c] : c
