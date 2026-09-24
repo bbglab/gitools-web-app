@@ -131,50 +131,8 @@ export function DropZone({ onDatasetLoaded }: DropZoneProps) {
           )}
         </div>
 
-        {/* Format guide */}
-        <div className="mt-5 rounded-xl border border-[--color-border] bg-[--color-surface] overflow-hidden">
-          <div className="px-4 py-2 border-b border-[--color-border]">
-            <span className="text-xs font-semibold text-[--color-text-muted] uppercase tracking-wide">Supported file formats</span>
-          </div>
-          <div className="divide-y divide-[--color-border]">
-            {[
-              {
-                tag: 'TSV / TXT',
-                ext: '.tsv  .txt',
-                desc: 'Plain tab-separated table. The first row contains sample IDs (one per column) and the first column contains gene or probe IDs. This is the simplest format — you can export it directly from Excel or R (write.table) or Python (df.to_csv(..., sep="\\t")).',
-                example: 'gene_id\tSample1\tSample2\tSample3\nGENE_A\t1.23\t−0.45\t0.80\nGENE_B\t−1.10\t2.34\t0.11',
-              },
-              {
-                tag: 'CSV',
-                ext: '.csv',
-                desc: 'Comma-separated table, same layout as TSV. First row = sample IDs, first column = gene/probe IDs. Export from Excel as "CSV (comma delimited)" or use df.to_csv() in Python.',
-                example: 'gene_id,Sample1,Sample2,Sample3\nGENE_A,1.23,−0.45,0.80\nGENE_B,−1.10,2.34,0.11',
-              },
-              {
-                tag: 'TDM',
-                ext: '.tdm',
-                desc: 'Gitools Tab-Delimited Matrix — a long/melted format where each line represents one cell. Header: column, row, then one column per data series. Missing values are encoded as "−". Supports multiple data layers (e.g. expression + p-value) in a single file.',
-                example: 'column\trow\texpression\tp-value\nSample1\tGENE_A\t1.23\t0.04\nSample1\tGENE_B\t−1.10\t0.12',
-              },
-            ].map(({ tag, ext, desc, example }) => (
-              <div key={tag} className="px-4 py-3 flex gap-3">
-                <div className="shrink-0 w-24 pt-0.5">
-                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[--color-bg] border border-[--color-border] text-[--color-accent]">{tag}</span>
-                  <div className="text-[10px] text-[--color-text-muted] mt-0.5 font-mono">{ext}</div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-[--color-text-muted] leading-relaxed">{desc}</p>
-                  {example && (
-                    <pre className="mt-1.5 text-[10px] rounded px-2 py-1 overflow-x-auto bg-[--color-bg] text-[--color-text-muted] border border-[--color-border]">{example}</pre>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="px-4 py-2 border-t border-[--color-border] text-[10px] text-[--color-text-muted]">
-            Annotation files (sample groups, gene names) can be added after loading — drag a TSV onto the Annotations sidebar.
-          </div>
-        </div>
+        {/* Format guide — collapsed by default */}
+        <FormatGuide />
 
         {/* Error */}
         {loadState === 'error' && (
@@ -198,6 +156,65 @@ export function DropZone({ onDatasetLoaded }: DropZoneProps) {
           onChange={onInputChange}
         />
       </div>
+    </div>
+  )
+}
+
+const FORMATS = [
+  {
+    tag: 'TSV / TXT',
+    ext: '.tsv  .txt',
+    desc: 'Plain tab-separated table. The first row contains sample IDs (one per column) and the first column contains gene or probe IDs. Export from Excel or R (write.table) or Python (df.to_csv(..., sep="\\t")).',
+    example: 'gene_id\tSample1\tSample2\tSample3\nGENE_A\t1.23\t−0.45\t0.80\nGENE_B\t−1.10\t2.34\t0.11',
+  },
+  {
+    tag: 'CSV',
+    ext: '.csv',
+    desc: 'Comma-separated table, same layout as TSV. First row = sample IDs, first column = gene/probe IDs. Export from Excel as "CSV (comma delimited)" or use df.to_csv() in Python.',
+    example: 'gene_id,Sample1,Sample2,Sample3\nGENE_A,1.23,−0.45,0.80\nGENE_B,−1.10,2.34,0.11',
+  },
+  {
+    tag: 'TDM',
+    ext: '.tdm',
+    desc: 'Gitools Tab-Delimited Matrix — a long/melted format where each line represents one cell. Header: column, row, then one column per data series. Supports multiple data layers (e.g. expression + p-value) in a single file.',
+    example: 'column\trow\texpression\tp-value\nSample1\tGENE_A\t1.23\t0.04\nSample1\tGENE_B\t−1.10\t0.12',
+  },
+]
+
+function FormatGuide() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="mt-4">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-[11px] text-[--color-text-muted] hover:text-[--color-text] transition-colors mx-auto"
+      >
+        <span>{open ? '▾' : '▸'}</span>
+        <span>Supported file formats</span>
+      </button>
+
+      {open && (
+        <div className="mt-2 rounded-xl border border-[--color-border] bg-[--color-surface] overflow-hidden">
+          <div className="divide-y divide-[--color-border]">
+            {FORMATS.map(({ tag, ext, desc, example }) => (
+              <div key={tag} className="px-4 py-3 flex gap-3">
+                <div className="shrink-0 w-20 pt-0.5">
+                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[--color-bg] border border-[--color-border] text-[--color-accent]">{tag}</span>
+                  <div className="text-[10px] text-[--color-text-muted] mt-0.5 font-mono">{ext}</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-[--color-text-muted] leading-relaxed">{desc}</p>
+                  <pre className="mt-1.5 text-[10px] rounded px-2 py-1 overflow-x-auto bg-[--color-bg] text-[--color-text-muted] border border-[--color-border]">{example}</pre>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="px-4 py-2 border-t border-[--color-border] text-[10px] text-[--color-text-muted]">
+            Annotation files (sample groups, gene names) can be added after loading — drag a TSV onto the Annotations sidebar.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
