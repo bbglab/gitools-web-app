@@ -118,7 +118,7 @@ export function DropZone({ onDatasetLoaded }: DropZoneProps) {
                 <p className="text-sm text-[--color-text-muted] mt-1">or click to browse</p>
               </div>
               <div className="flex gap-2 flex-wrap justify-center">
-                {['TDM', 'GCT v1.2', 'GCT v1.3', 'TSV', 'CSV', 'Parquet', 'Arrow'].map(fmt => (
+                {['TDM', 'TSV', 'CSV'].map(fmt => (
                   <span
                     key={fmt}
                     className="px-2 py-0.5 rounded text-xs font-mono bg-[--color-bg] border border-[--color-border] text-[--color-text-muted]"
@@ -140,27 +140,21 @@ export function DropZone({ onDatasetLoaded }: DropZoneProps) {
             {[
               {
                 tag: 'TSV / TXT',
-                ext: '.tsv .txt',
-                desc: 'Plain tab-separated table. First row = sample IDs (columns), first column = gene/probe IDs (rows). The simplest format — open any spreadsheet and export as TSV.',
-                example: 'gene_id\tSample1\tSample2\nGENE_A\t1.23\t−0.45',
+                ext: '.tsv  .txt',
+                desc: 'Plain tab-separated table. The first row contains sample IDs (one per column) and the first column contains gene or probe IDs. This is the simplest format — you can export it directly from Excel or R (write.table) or Python (df.to_csv(..., sep="\\t")).',
+                example: 'gene_id\tSample1\tSample2\tSample3\nGENE_A\t1.23\t−0.45\t0.80\nGENE_B\t−1.10\t2.34\t0.11',
               },
               {
-                tag: 'GCT v1.2',
-                ext: '.gct',
-                desc: 'Broad Institute format for gene expression matrices. Has two header rows with dimensions, then a tab-separated matrix with Name and Description columns. Single data layer.',
-                example: '#1.2\n1000\t50\nName\tDescription\tSample1…',
+                tag: 'CSV',
+                ext: '.csv',
+                desc: 'Comma-separated table, same layout as TSV. First row = sample IDs, first column = gene/probe IDs. Export from Excel as "CSV (comma delimited)" or use df.to_csv() in Python.',
+                example: 'gene_id,Sample1,Sample2,Sample3\nGENE_A,1.23,−0.45,0.80\nGENE_B,−1.10,2.34,0.11',
               },
               {
-                tag: 'GCT v1.3',
-                ext: '.gct',
-                desc: 'Multi-layer GCT. Stores several values per cell (e.g. expression + p-value + fold-change). Used when a single experiment produces multiple readouts per gene/sample pair.',
-                example: '#1.3\n1000\t50\t1\t3\nid\tgid\trdesc\t…',
-              },
-              {
-                tag: 'Parquet / Arrow',
-                ext: '.parquet .arrow',
-                desc: 'Binary columnar formats. 5–10× smaller than TSV and much faster to load for large matrices (>10,000 genes). Generate with pandas: df.to_parquet("matrix.parquet").',
-                example: null,
+                tag: 'TDM',
+                ext: '.tdm',
+                desc: 'Gitools Tab-Delimited Matrix — a long/melted format where each line represents one cell. Header: column, row, then one column per data series. Missing values are encoded as "−". Supports multiple data layers (e.g. expression + p-value) in a single file.',
+                example: 'column\trow\texpression\tp-value\nSample1\tGENE_A\t1.23\t0.04\nSample1\tGENE_B\t−1.10\t0.12',
               },
             ].map(({ tag, ext, desc, example }) => (
               <div key={tag} className="px-4 py-3 flex gap-3">
