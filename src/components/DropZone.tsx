@@ -131,6 +131,57 @@ export function DropZone({ onDatasetLoaded }: DropZoneProps) {
           )}
         </div>
 
+        {/* Format guide */}
+        <div className="mt-5 rounded-xl border border-[--color-border] bg-[--color-surface] overflow-hidden">
+          <div className="px-4 py-2 border-b border-[--color-border]">
+            <span className="text-xs font-semibold text-[--color-text-muted] uppercase tracking-wide">Supported file formats</span>
+          </div>
+          <div className="divide-y divide-[--color-border]">
+            {[
+              {
+                tag: 'TSV / TXT',
+                ext: '.tsv .txt',
+                desc: 'Plain tab-separated table. First row = sample IDs (columns), first column = gene/probe IDs (rows). The simplest format — open any spreadsheet and export as TSV.',
+                example: 'gene_id\tSample1\tSample2\nGENE_A\t1.23\t−0.45',
+              },
+              {
+                tag: 'GCT v1.2',
+                ext: '.gct',
+                desc: 'Broad Institute format for gene expression matrices. Has two header rows with dimensions, then a tab-separated matrix with Name and Description columns. Single data layer.',
+                example: '#1.2\n1000\t50\nName\tDescription\tSample1…',
+              },
+              {
+                tag: 'GCT v1.3',
+                ext: '.gct',
+                desc: 'Multi-layer GCT. Stores several values per cell (e.g. expression + p-value + fold-change). Used when a single experiment produces multiple readouts per gene/sample pair.',
+                example: '#1.3\n1000\t50\t1\t3\nid\tgid\trdesc\t…',
+              },
+              {
+                tag: 'Parquet / Arrow',
+                ext: '.parquet .arrow',
+                desc: 'Binary columnar formats. 5–10× smaller than TSV and much faster to load for large matrices (>10,000 genes). Generate with pandas: df.to_parquet("matrix.parquet").',
+                example: null,
+              },
+            ].map(({ tag, ext, desc, example }) => (
+              <div key={tag} className="px-4 py-3 flex gap-3">
+                <div className="shrink-0 w-24 pt-0.5">
+                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-[--color-bg] border border-[--color-border] text-[--color-accent]">{tag}</span>
+                  <div className="text-[10px] text-[--color-text-muted] mt-0.5 font-mono">{ext}</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-[--color-text-muted] leading-relaxed">{desc}</p>
+                  {example && (
+                    <pre className="mt-1.5 text-[10px] rounded px-2 py-1 overflow-x-auto bg-[--color-bg] text-[--color-text-muted] border border-[--color-border]">{example}</pre>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="px-4 py-2 border-t border-[--color-border] text-[10px] text-[--color-text-muted]">
+            Annotation files (sample groups, gene names) can be added after loading — drag a TSV onto the Annotations sidebar.
+          </div>
+        </div>
+
         {/* Error */}
         {loadState === 'error' && (
           <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
