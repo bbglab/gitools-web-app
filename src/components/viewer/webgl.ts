@@ -167,29 +167,73 @@ export function uploadDataTexture(
   return { texture: tex, texW, texH, tilingK: K }
 }
 
-// Blue → White → Red diverging colormap (suitable for centered expression data)
-export function makeColormapData(): Uint8Array {
-  const n = 256
+export type ColormapPreset = 'bwr' | 'rwb' | 'viridis' | 'greys' | 'plasma' | 'rdylbu'
+
+// Human-readable labels for the UI
+export const COLORMAP_LABELS: Record<ColormapPreset, string> = {
+  bwr:    'Blue-White-Red',
+  rwb:    'Red-White-Blue',
+  viridis:'Viridis',
+  greys:  'Greys',
+  plasma: 'Plasma',
+  rdylbu: 'RdYlBu',
+}
+
+// CSS gradient for the legend bar — must match the GPU colormap
+export const COLORMAP_CSS: Record<ColormapPreset, string> = {
+  bwr:    'linear-gradient(to right,rgb(33,102,172),rgb(247,247,247),rgb(214,96,77))',
+  rwb:    'linear-gradient(to right,rgb(214,96,77),rgb(247,247,247),rgb(33,102,172))',
+  viridis:'linear-gradient(to right,rgb(68,1,84),rgb(59,82,139),rgb(33,145,140),rgb(94,201,98),rgb(253,231,37))',
+  greys:  'linear-gradient(to right,rgb(20,20,20),rgb(240,240,240))',
+  plasma: 'linear-gradient(to right,rgb(13,8,135),rgb(126,3,167),rgb(203,70,121),rgb(248,149,64),rgb(240,249,33))',
+  rdylbu: 'linear-gradient(to right,rgb(215,48,39),rgb(252,141,89),rgb(255,255,191),rgb(145,191,219),rgb(69,117,180))',
+}
+
+function lerp3(a: number[], b: number[], t: number): [number, number, number] {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ]
+}
+
+function stopsToRgb(stops: [number, number[]][], n = 256): Uint8Array {
   const out = new Uint8Array(n * 3)
-  const blue  = [33,  102, 172]
-  const white = [247, 247, 247]
-  const red   = [214, 96,  77]
   for (let i = 0; i < n; i++) {
     const t = i / (n - 1)
-    const [a, b, s] = t <= 0.5
-      ? [blue,  white, t * 2]
-      : [white, red,   (t - 0.5) * 2]
-    out[i * 3]     = Math.round(a[0] + (b[0] - a[0]) * s)
-    out[i * 3 + 1] = Math.round(a[1] + (b[1] - a[1]) * s)
-    out[i * 3 + 2] = Math.round(a[2] + (b[2] - a[2]) * s)
+    let a = stops[0], b = stops[stops.length - 1]
+    for (let j = 0; j < stops.length - 1; j++) {
+      if (t >= stops[j][0] && t <= stops[j + 1][0]) { a = stops[j]; b = stops[j + 1]; break }
+    }
+    const s = a[0] === b[0] ? 0 : (t - a[0]) / (b[0] - a[0])
+    const [r, g, bv] = lerp3(a[1], b[1], s)
+    out[i * 3] = r; out[i * 3 + 1] = g; out[i * 3 + 2] = bv
   }
   return out
 }
 
-export function uploadColormapTexture(gl: WebGL2RenderingContext): WebGLTexture {
+export function makeColormapData(preset: ColormapPreset = 'bwr'): Uint8Array {
+  switch (preset) {
+    case 'bwr': return stopsToRgb([[0,[33,102,172]],[0.5,[247,247,247]],[1,[214,96,77]]])
+    case 'rwb': return stopsToRgb([[0,[214,96,77]],[0.5,[247,247,247]],[1,[33,102,172]]])
+    case 'greys': return stopsToRgb([[0,[20,20,20]],[1,[240,240,240]]])
+    case 'viridis': return stopsToRgb([
+      [0,[68,1,84]],[0.13,[71,44,122]],[0.25,[59,81,139]],[0.38,[44,113,142]],
+      [0.5,[33,144,141]],[0.63,[39,173,129]],[0.75,[92,200,99]],[0.88,[170,220,50]],[1,[253,231,37]],
+    ])
+    case 'plasma': return stopsToRgb([
+      [0,[13,8,135]],[0.25,[126,3,167]],[0.5,[203,70,121]],[0.75,[248,149,64]],[1,[240,249,33]],
+    ])
+    case 'rdylbu': return stopsToRgb([
+      [0,[215,48,39]],[0.25,[252,141,89]],[0.5,[255,255,191]],[0.75,[145,191,219]],[1,[69,117,180]],
+    ])
+  }
+}
+
+export function uploadColormapTexture(gl: WebGL2RenderingContext, preset: ColormapPreset = 'bwr'): WebGLTexture {
   const tex = gl.createTexture()!
   gl.bindTexture(gl.TEXTURE_2D, tex)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 256, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, makeColormapData())
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 256, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, makeColormapData(preset))
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)

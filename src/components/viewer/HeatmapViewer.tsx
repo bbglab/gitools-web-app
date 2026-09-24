@@ -3,9 +3,9 @@ import type { Dataset } from '../../core/Dataset'
 import type { Vector, VectorValue } from '../../core/MetadataModel'
 import {
   createProgram, uploadDataTexture, uploadColormapTexture,
-  computeColorRange,
+  computeColorRange, COLORMAP_LABELS, COLORMAP_CSS,
 } from './webgl'
-import type { DataTextureResult } from './webgl'
+import type { DataTextureResult, ColormapPreset } from './webgl'
 import { ColAnnotationTrack, RowAnnotationTrack, buildCategoryColors } from './AnnotationTrack'
 import { FilterPanel, OP_LABELS } from './FilterPanel'
 import type { ValueFilterRule, IdFilterConfig } from './FilterPanel'
@@ -234,6 +234,11 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   const [trackDisplayModes, setTrackDisplayModes] = useState<Map<string, 'color' | 'text'>>(new Map())
   const [customColors,      setCustomColors]      = useState<Map<string, Map<string, string>>>(new Map())
 
+  // ── Color scale state ────────────────────────────────────────────────────────
+  const [colormapPreset, setColormapPreset] = useState<ColormapPreset>('bwr')
+  const [vminOverride,   setVminOverride]   = useState<number | null>(null)
+  const [vmaxOverride,   setVmaxOverride]   = useState<number | null>(null)
+
   // ── Export state ─────────────────────────────────────────────────────────────
   const [exportOpen,    setExportOpen]    = useState(false)
   const [exportW,       setExportW]       = useState(0)   // 0 = auto-init on open
@@ -330,6 +335,12 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
     [dataset, activeSeries],
   )
 
+  // Reset overrides when series or dataset changes
+  useEffect(() => { setVminOverride(null); setVmaxOverride(null) }, [dataset, activeSeries])
+
+  const effectiveVmin = vminOverride ?? colorRange[0]
+  const effectiveVmax = vmaxOverride ?? colorRange[1]
+
   const rowIdVec = dataset.rowMetadata.getVector('id')
   const colIdVec = dataset.colMetadata.getVector('id')
 
@@ -424,6 +435,14 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataset, activeSeries, texVersion])
 
+  // ── Re-upload colormap texture when preset changes ───────────────────────────
+  useEffect(() => {
+    const gl = glRef.current
+    if (!gl) return
+    if (cmapTexRef.current) gl.deleteTexture(cmapTexRef.current)
+    cmapTexRef.current = uploadColormapTexture(gl, colormapPreset)
+  }, [colormapPreset])
+
   // ── Resize observer ──────────────────────────────────────────────────────────
   useEffect(() => {
     const el = containerRef.current
@@ -479,13 +498,13 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
       gl.uniform2f(gl.getUniformLocation(prog, 'u_canvasSize'), pw, ph)
       gl.uniform2f(gl.getUniformLocation(prog, 'u_cellSize'),   vs.cellW * dpr, vs.cellH * dpr)
       gl.uniform2f(gl.getUniformLocation(prog, 'u_offset'),     vs.colOffset, vs.rowOffset)
-      gl.uniform1f(gl.getUniformLocation(prog, 'u_vmin'),       colorRange[0])
-      gl.uniform1f(gl.getUniformLocation(prog, 'u_vmax'),       colorRange[1])
+      gl.uniform1f(gl.getUniformLocation(prog, 'u_vmin'),       effectiveVmin)
+      gl.uniform1f(gl.getUniformLocation(prog, 'u_vmax'),       effectiveVmax)
       const [br, bg, bb, ba] = theme.clearColor
       gl.uniform4f(gl.getUniformLocation(prog, 'u_bgColor'),    br, bg, bb, ba)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     })
-  }, [canvasSize, viewState, colorRange, dataset, displayRowOrder, displayColOrder, darkMode])
+  }, [canvasSize, viewState, effectiveVmin, effectiveVmax, colormapPreset, dataset, displayRowOrder, displayColOrder, darkMode])
 
   // ── Sort (operates on full order, filter is applied on top) ──────────────────
   const [lastColSort, setLastColSort] = useState<{ dc: number; dir: 'asc' | 'desc' } | null>(null)
@@ -694,7 +713,7 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
         const { texture: dTex, texW, texH, tilingK } = uploadDataTexture(
           gl, dataset, activeSeries, displayRowOrder, displayColOrder,
         )
-        const cTex = uploadColormapTexture(gl)
+        const cTex = uploadColormapTexture(gl, colormapPreset)
         gl.viewport(0, 0, exportW, exportH)
         const [cr, cg, cb, ca] = exportLightBg ? LIGHT_THEME.clearColor : DARK_THEME.clearColor
         gl.clearColor(cr, cg, cb, ca)
@@ -710,8 +729,8 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
         gl.uniform2f(gl.getUniformLocation(prog, 'u_canvasSize'), exportW, exportH)
         gl.uniform2f(gl.getUniformLocation(prog, 'u_cellSize'),   exportW / nCols, exportH / nRows)
         gl.uniform2f(gl.getUniformLocation(prog, 'u_offset'),     0, 0)
-        gl.uniform1f(gl.getUniformLocation(prog, 'u_vmin'),       colorRange[0])
-        gl.uniform1f(gl.getUniformLocation(prog, 'u_vmax'),       colorRange[1])
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_vmin'),       effectiveVmin)
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_vmax'),       effectiveVmax)
         gl.uniform4f(gl.getUniformLocation(prog, 'u_bgColor'),    cr, cg, cb, ca)
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
         const seriesName = dataset.seriesNames[activeSeries] ?? 'heatmap'
@@ -728,7 +747,7 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
         setExportOpen(false)
       }
     }, 30)
-  }, [dataset, activeSeries, displayRowOrder, displayColOrder, colorRange, exportW, exportH, exportLightBg])
+  }, [dataset, activeSeries, displayRowOrder, displayColOrder, effectiveVmin, effectiveVmax, colormapPreset, exportW, exportH, exportLightBg])
 
   // ── Clamp (uses display counts) ───────────────────────────────────────────────
   const clampOffset = useCallback((vs: ViewState, co: number, ro: number, w: number, h: number) => ({
@@ -1484,7 +1503,15 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
         </div>
 
         {/* ── Color legend ── */}
-        <ColorLegend vmin={colorRange[0]} vmax={colorRange[1]} surface={theme.surface} />
+        <ColorScaleBar
+          autoVmin={colorRange[0]} autoVmax={colorRange[1]}
+          vminOverride={vminOverride} vmaxOverride={vmaxOverride}
+          preset={colormapPreset}
+          surface={theme.surface} isDark={darkMode}
+          onPreset={setColormapPreset}
+          onVmin={setVminOverride}
+          onVmax={setVmaxOverride}
+        />
 
         {/* ── Errors ── */}
         {annotError && (
@@ -1843,18 +1870,83 @@ function SidebarSection({
   )
 }
 
-// ── Color legend ──────────────────────────────────────────────────────────────
+// ── Color scale bar ───────────────────────────────────────────────────────────
 
-function ColorLegend({ vmin, vmax, surface }: { vmin: number; vmax: number; surface: string }) {
+const PRESETS = Object.keys(COLORMAP_LABELS) as ColormapPreset[]
+
+function ColorScaleBar({ autoVmin, autoVmax, vminOverride, vmaxOverride, preset, surface, isDark, onPreset, onVmin, onVmax }: {
+  autoVmin: number; autoVmax: number
+  vminOverride: number | null; vmaxOverride: number | null
+  preset: ColormapPreset
+  surface: string; isDark: boolean
+  onPreset: (p: ColormapPreset) => void
+  onVmin: (v: number | null) => void
+  onVmax: (v: number | null) => void
+}) {
+  const muted  = isDark ? '#6b7280' : '#9ca3af'
+  const text   = isDark ? '#e2e8f0' : '#1a1a1a'
+  const border = isDark ? '#2a2a45' : '#e0e0e0'
+  const inputStyle: React.CSSProperties = {
+    background: isDark ? '#0f0f22' : '#fff', color: text,
+    border: `1px solid ${border}`, outline: 'none',
+    width: 68, textAlign: 'right' as const,
+  }
+  const effectiveVmin = vminOverride ?? autoVmin
+  const effectiveVmax = vmaxOverride ?? autoVmax
+  const overridden = vminOverride !== null || vmaxOverride !== null
+
   return (
-    <div className="flex items-center gap-3 px-4 py-1.5 shrink-0 border-t border-[--color-border]"
-      style={{ background: surface }}>
-      <span className="text-xs font-mono text-[--color-text-muted] tabular-nums w-12 text-right">{vmin.toFixed(2)}</span>
-      <div className="h-2.5 rounded flex-1 max-w-40"
-        style={{ background: 'linear-gradient(to right, rgb(33,102,172), rgb(247,247,247), rgb(214,96,77))' }} />
-      <span className="text-xs font-mono text-[--color-text-muted] tabular-nums w-12">{vmax.toFixed(2)}</span>
-      <span className="text-xs text-[--color-text-muted] ml-2">
-        scroll rows · shift+scroll cols · ctrl+scroll zoom · drag to pan · shift+click label to select for sum-sort
+    <div className="flex items-center gap-2 px-3 py-1.5 shrink-0 border-t flex-wrap text-xs font-mono"
+      style={{ background: surface, borderColor: border, color: muted }}>
+
+      {/* Colormap preset pills */}
+      <div className="flex gap-1 shrink-0">
+        {PRESETS.map(p => (
+          <button key={p} onClick={() => onPreset(p)}
+            className="px-1.5 py-0.5 rounded border text-[10px] transition-colors"
+            style={p === preset
+              ? { background: isDark ? '#2a2a6e' : '#dbeafe', color: isDark ? '#a0a8ff' : '#1d4ed8', borderColor: isDark ? '#4040a0' : '#93c5fd' }
+              : { background: 'transparent', color: muted, borderColor: border }}>
+            {COLORMAP_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
+      <div className="w-px h-4 shrink-0" style={{ background: border }} />
+
+      {/* Min input */}
+      <input type="number" step="any"
+        value={effectiveVmin}
+        onFocus={e => e.target.select()}
+        onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) onVmin(n) }}
+        className="rounded px-1.5 py-0.5 tabular-nums"
+        style={inputStyle}
+        title="Color scale minimum"
+      />
+
+      {/* Gradient bar */}
+      <div className="h-3 rounded shrink-0" style={{ width: 120, background: COLORMAP_CSS[preset] }} />
+
+      {/* Max input */}
+      <input type="number" step="any"
+        value={effectiveVmax}
+        onFocus={e => e.target.select()}
+        onChange={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) onVmax(n) }}
+        className="rounded px-1.5 py-0.5 tabular-nums"
+        style={{ ...inputStyle, textAlign: 'left' }}
+        title="Color scale maximum"
+      />
+
+      {/* Reset link */}
+      {overridden && (
+        <button onClick={() => { onVmin(null); onVmax(null) }}
+          className="underline text-[10px] shrink-0 hover:opacity-70" style={{ color: muted }}>
+          reset
+        </button>
+      )}
+
+      <span className="ml-auto text-[10px] hidden lg:inline" style={{ color: isDark ? '#4b5563' : '#c0c0c0' }}>
+        scroll · shift+scroll · ctrl+scroll zoom · drag to pan
       </span>
     </div>
   )
