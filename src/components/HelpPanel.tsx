@@ -111,11 +111,35 @@ export function HelpPanel({ onClose, isDark }: Props) {
                 <p className="mt-1">In <b style={{ color: text }}>C (color)</b> mode, click <b style={{ color: text }}>▶</b> to expand the field. Each category value shows a small colored square to its left — click it to open a color picker and choose a custom color. The change is applied immediately to the annotation track.</p>
               </Section>
 
-              <Section title="5. Search" accent={accent} border={border}>
+              <Section title="5. Filter rows / columns" accent={accent} border={border}>
+                <p>Click <b>⊘ Filter</b> in the toolbar to open the filter panel. Filters are applied instantly and shown in the status bar above the heatmap.</p>
+                <p className="mt-2"><b>Filter by value</b> — keep only rows (genes) or columns (samples) whose aggregate statistic meets a condition. Each rule has three parts:</p>
+                <ul className="list-disc ml-4 mt-1 flex flex-col gap-0.5" style={{ color: muted }}>
+                  <li><b style={{ color: text }}>Aggregate</b> — what to compute across the row/column: mean, min, max, or <b style={{ color: text }}>% empty</b> (percentage of cells that have no value)</li>
+                  <li><b style={{ color: text }}>Operator</b> — the comparison: &lt; &gt; ≤ ≥ = ≠</li>
+                  <li><b style={{ color: text }}>Threshold</b> — the numeric cutoff</li>
+                  <li><b style={{ color: text }}>Series</b> — which data layer to compute on (if the file has multiple)</li>
+                </ul>
+                <p className="mt-2"><b>Understanding % empty</b></p>
+                <p className="mt-1" style={{ color: muted }}>
+                  <b style={{ color: text }}>% empty</b> is the fraction of cells with no value (NaN), expressed as a percentage from 0 to 100.
+                  Use <b style={{ color: text }}>&lt;</b> with a threshold to keep rows/columns that are not too sparse:
+                </p>
+                <ul className="list-disc ml-4 mt-1 flex flex-col gap-0.5" style={{ color: muted }}>
+                  <li><b style={{ color: text }}>% empty &lt; 100</b> — remove only completely empty rows/columns (very permissive)</li>
+                  <li><b style={{ color: text }}>% empty &lt; 50</b> — keep only rows/columns that have data in at least half the cells</li>
+                  <li><b style={{ color: text }}>% empty &lt; 20</b> — keep only well-covered rows/columns</li>
+                </ul>
+                <p className="mt-2"><b>Filter by ID list</b> — paste a list of gene or sample IDs (one per line) to include or exclude them exactly.</p>
+                <p className="mt-2"><b>Rows vs. columns</b> — use the <b style={{ color: text }}>Rows</b> and <b style={{ color: text }}>Columns</b> tabs to set filters independently for each axis. Both can be active at the same time. The status bar shows how many rows and columns remain.</p>
+                <p className="mt-2">You can add multiple rules per axis — all rules must pass for a row/column to be kept. Click <b style={{ color: text }}>Clear row/column filters</b> to reset.</p>
+              </Section>
+
+              <Section title="6. Search" accent={accent} border={border}>
                 <p>Type a gene name in the <b>Search gene…</b> box in the toolbar. Matching rows are highlighted and the view scrolls to the first match automatically.</p>
               </Section>
 
-              <Section title="6. Compare groups" accent={accent} border={border}>
+              <Section title="7. Compare groups" accent={accent} border={border}>
                 <p>Click <b>⚖ Compare Groups</b> to open the statistical comparison panel. You need column annotations loaded first.</p>
                 <ol className="list-decimal ml-4 mt-1 flex flex-col gap-0.5" style={{ color: muted }}>
                   <li>Select an <b style={{ color: text }}>annotation field</b> (e.g. disease, treatment)</li>
@@ -278,6 +302,7 @@ export function HelpPanel({ onClose, isDark }: Props) {
                       ['▶ Annotations',    'Open/close the annotation sidebar (load TSV, sort, filter)'],
                       ['Series buttons',   'Switch between data layers if the file has multiple series (GCT v1.3)'],
                       ['Search gene…',     'Highlight matching rows and scroll to first match'],
+                      ['⊘ Filter',         'Open the filter panel — filter rows/columns by value, % empty, or ID list'],
                       ['⚖ Compare Groups', 'Open the group comparison panel'],
                       ['Light / Dark',     'Toggle background colour'],
                     ].map(([key, desc]) => (
