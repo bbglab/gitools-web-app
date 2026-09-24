@@ -10,6 +10,7 @@ import { ColAnnotationTrack, RowAnnotationTrack, buildCategoryColors } from './A
 import { loadAnnotationTsv } from '../../io/AnnotationReader'
 import { GroupBuilder, TEST_OPTIONS } from '../comparison/GroupBuilder'
 import { ResultsPanel } from '../comparison/ResultsPanel'
+import { HelpPanel } from '../HelpPanel'
 import type { TestName, RowResult, WorkerRequest, WorkerResponse } from '../../stats/types'
 
 const ROW_LABEL_W  = 140
@@ -174,6 +175,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
   const [annotError,   setAnnotError]   = useState<string | null>(null)
 
   // ── Comparison state ─────────────────────────────────────────────────────────
+  const [helpOpen,        setHelpOpen]        = useState(false)
   const [compareOpen,     setCompareOpen]     = useState(false)
   const [annotField,      setAnnotField]      = useState('')
   const [groupAssignments, setGroupAssignments] = useState<Map<string, 'A' | 'B'>>(new Map())
@@ -895,6 +897,13 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           >
             {darkMode ? 'Light' : 'Dark'}
           </button>
+          <button
+            onClick={() => setHelpOpen(true)}
+            className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
+            title="Help"
+          >
+            ? Help
+          </button>
         </div>
 
         {/* ── Active filter status bar ── */}
@@ -1252,6 +1261,9 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           </>
         )}
       </div>
+
+      {/* ── Help modal ── */}
+      {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} isDark={darkMode} />}
 
       {/* ── Tooltip ── */}
       {tooltip && (
