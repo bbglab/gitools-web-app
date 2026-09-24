@@ -232,6 +232,7 @@ export function FilterPanel({
                     type="number"
                     step="any"
                     value={rule.threshold}
+                    onFocus={e => e.target.select()}
                     onChange={e => {
                       const n = parseFloat(e.target.value)
                       if (!isNaN(n)) updateRule(rule.id, { threshold: n })
