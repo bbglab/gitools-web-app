@@ -10,6 +10,13 @@ import { ColAnnotationTrack, RowAnnotationTrack, buildCategoryColors } from './A
 import { FilterPanel, OP_LABELS } from './FilterPanel'
 import type { ValueFilterRule, IdFilterConfig } from './FilterPanel'
 import { loadAnnotationTsv } from '../../io/AnnotationReader'
+import { writeGctV12, downloadText } from '../../io/GctWriter'
+import {
+  buildSession, downloadSession, parseSessionFile,
+  encodeHashState, parseHashState,
+  serializeIdFilter, deserializeIdFilter,
+} from '../../io/sessionIO'
+import type { GitoolsSession } from '../../io/sessionIO'
 import { GroupBuilder, TEST_OPTIONS } from '../comparison/GroupBuilder'
 import { ResultsPanel } from '../comparison/ResultsPanel'
 import type { TestName, RowResult, WorkerRequest, WorkerResponse } from '../../stats/types'
@@ -245,6 +252,26 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   const [exportH,       setExportH]       = useState(0)
   const [exportLightBg, setExportLightBg] = useState(true)
   const [exportLoading, setExportLoading] = useState(false)
+
+  // ── Session state ────────────────────────────────────────────────────────────
+  const [sessionError,  setSessionError]  = useState<string | null>(null)
+  const sessionFileRef = useRef<HTMLInputElement>(null)
+
+  // ── URL hash: read on mount, write on changes ─────────────────────────────────
+  useEffect(() => {
+    const s = parseHashState()
+    if (s.dark   !== undefined) setDarkMode(s.dark)
+    if (s.cmap   !== undefined) setColormapPreset(s.cmap as ColormapPreset)
+    if (s.series !== undefined) setActiveSeries(s.series)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const encoded = encodeHashState({ dark: darkMode, cmap: colormapPreset, series: activeSeries })
+    if (encoded !== window.location.hash) {
+      window.history.replaceState(null, '', encoded || (window.location.pathname + window.location.search))
+    }
+  }, [darkMode, colormapPreset, activeSeries])
 
   // ── Comparison state ─────────────────────────────────────────────────────────
   const [compareOpen,     setCompareOpen]     = useState(false)
@@ -749,6 +776,98 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
     }, 30)
   }, [dataset, activeSeries, displayRowOrder, displayColOrder, effectiveVmin, effectiveVmax, colormapPreset, exportW, exportH, exportLightBg])
 
+  // ── Export GCT ───────────────────────────────────────────────────────────────
+  const exportGct = useCallback(() => {
+    const gct      = writeGctV12(dataset, displayRowOrder, displayColOrder, activeSeries)
+    const series   = dataset.seriesNames[activeSeries] ?? 'data'
+    const filename = `heatmap_${displayRowOrder.length}x${displayColOrder.length}_${series}.gct`
+    downloadText(gct, filename)
+  }, [dataset, displayRowOrder, displayColOrder, activeSeries])
+
+  // ── Save session ──────────────────────────────────────────────────────────────
+  const saveSession = useCallback(() => {
+    const session = buildSession(dataset, {
+      darkMode,
+      colormapPreset,
+      vminOverride,
+      vmaxOverride,
+      activeSeries,
+      rowOrder:         [...rowOrder],
+      colOrder:         [...colOrder],
+      visColTracks:     [...visColTracks],
+      visRowTracks:     [...visRowTracks],
+      trackDisplayModes: [...trackDisplayModes],
+      customColors:     [...customColors].map(([k, v]) => [k, [...v]] as [string, [string, string][]]),
+      rowFilters:       [...rowFilters].map(([k, v]) => [k, [...v]]),
+      colFilters:       [...colFilters].map(([k, v]) => [k, [...v]]),
+      rowValueFilters:  [...rowValueFilters],
+      colValueFilters:  [...colValueFilters],
+      rowIdFilter:      serializeIdFilter(rowIdFilter),
+      colIdFilter:      serializeIdFilter(colIdFilter),
+    })
+    downloadSession(session)
+  }, [
+    dataset, darkMode, colormapPreset, vminOverride, vmaxOverride,
+    activeSeries, rowOrder, colOrder,
+    visColTracks, visRowTracks, trackDisplayModes, customColors,
+    rowFilters, colFilters, rowValueFilters, colValueFilters, rowIdFilter, colIdFilter,
+  ])
+
+  // ── Load session ──────────────────────────────────────────────────────────────
+  const loadSession = useCallback(async (file: File) => {
+    setSessionError(null)
+    try {
+      const session: GitoolsSession = await parseSessionFile(file)
+      const info = session.dataInfo
+      if (info.rowCount !== dataset.rowCount || info.colCount !== dataset.colCount) {
+        throw new Error(
+          `Session is for a ${info.rowCount}×${info.colCount} matrix but current data is ` +
+          `${dataset.rowCount}×${dataset.colCount}. Load the matching data file first.`
+        )
+      }
+
+      // Restore any annotations from the session that aren't already present
+      let annotAdded = false
+      for (const ann of session.annotations) {
+        const meta = ann.axis === 'row' ? dataset.rowMetadata : dataset.colMetadata
+        const existing = meta.getVector(ann.name)
+        if (existing) {
+          // Overwrite values in-place so we don't duplicate the vector
+          ann.values.forEach((v, i) => { existing.values[i] = v })
+        } else {
+          const vec = meta.addVector(ann.name, ann.dataType)
+          ann.values.forEach((v, i) => { vec.values[i] = v })
+          annotAdded = true
+        }
+      }
+      if (annotAdded) setAnnotVersion(v => v + 1)
+
+      // Apply view state
+      const vs = session.viewState
+      setDarkMode(vs.darkMode)
+      setColormapPreset(vs.colormapPreset as ColormapPreset)
+      setVminOverride(vs.vminOverride)
+      setVmaxOverride(vs.vmaxOverride)
+      setActiveSeries(vs.activeSeries)
+      setRowOrder(vs.rowOrder)
+      setColOrder(vs.colOrder)
+      setVisColTracks(new Set(vs.visColTracks))
+      setVisRowTracks(new Set(vs.visRowTracks))
+      setTrackDisplayModes(new Map(vs.trackDisplayModes))
+      setCustomColors(new Map(vs.customColors.map(([k, v]) => [k, new Map(v)])))
+      setRowFilters(new Map(vs.rowFilters.map(([k, v]) => [k, new Set(v)])))
+      setColFilters(new Map(vs.colFilters.map(([k, v]) => [k, new Set(v)])))
+      setRowValueFilters(vs.rowValueFilters)
+      setColValueFilters(vs.colValueFilters)
+      setRowIdFilter(deserializeIdFilter(vs.rowIdFilter))
+      setColIdFilter(deserializeIdFilter(vs.colIdFilter))
+      setTexVersion(v => v + 1)
+      setViewState(prev => ({ ...prev, rowOffset: 0, colOffset: 0 }))
+    } catch (err) {
+      setSessionError(err instanceof Error ? err.message : String(err))
+    }
+  }, [dataset])
+
   // ── Clamp (uses display counts) ───────────────────────────────────────────────
   const clampOffset = useCallback((vs: ViewState, co: number, ro: number, w: number, h: number) => ({
     colOffset: Math.max(0, Math.min(Math.max(0, displayColOrderRef.current.length - w / vs.cellW), co)),
@@ -1161,6 +1280,27 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
             ↓ Export PNG
           </button>
           <button
+            onClick={exportGct}
+            className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
+            title="Export current view (filtered rows/cols, active series) as GCT v1.2"
+          >
+            ↓ Export GCT
+          </button>
+          <button
+            onClick={saveSession}
+            className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
+            title="Save session — annotations, sort order, filters, and view settings"
+          >
+            ↓ Save Session
+          </button>
+          <button
+            onClick={() => sessionFileRef.current?.click()}
+            className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
+            title="Load session JSON (restores annotations, sort order, filters, and view settings)"
+          >
+            ↑ Load Session
+          </button>
+          <button
             onClick={() => setDarkMode(d => !d)}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
             title="Toggle light/dark background"
@@ -1520,6 +1660,12 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
             <button onClick={() => setAnnotError(null)} className="underline ml-2">dismiss</button>
           </div>
         )}
+        {sessionError && (
+          <div className="px-3 py-1 text-xs text-orange-700 bg-orange-50 border-t border-orange-200 flex justify-between">
+            <span>Session: {sessionError}</span>
+            <button onClick={() => setSessionError(null)} className="underline ml-2">dismiss</button>
+          </div>
+        )}
       </div>
 
       {/* ── Right comparison panel ── */}
@@ -1657,6 +1803,19 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
           isDark={darkMode}
         />
       )}
+
+      {/* Hidden file input for session loading */}
+      <input
+        ref={sessionFileRef}
+        type="file"
+        accept=".json"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0]
+          if (file) loadSession(file)
+          e.target.value = ''
+        }}
+      />
 
       {/* ── Tooltip ── */}
       {tooltip && (

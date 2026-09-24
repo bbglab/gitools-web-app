@@ -150,6 +150,43 @@ export function HelpPanel({ onClose, isDark }: Props) {
                 <p className="mt-1">Results appear as a volcano plot and a ranked gene table. Click any gene in the table to highlight it in the heatmap. Click <b>Add as row annotations</b> to keep the scores permanently.</p>
               </Section>
 
+              <Section title="8. Export data" accent={accent} border={border}>
+                <p>Three export options are available in the toolbar:</p>
+                <ul className="list-disc ml-4 mt-1 flex flex-col gap-1" style={{ color: muted }}>
+                  <li>
+                    <b style={{ color: text }}>↓ Export PNG</b> — renders the heatmap to a PNG image.
+                    A dialog lets you set the output width and height (in pixels) and choose a white or dark background.
+                    The image always shows the full set of currently visible rows and columns (after filters), at full resolution regardless of screen zoom.
+                  </li>
+                  <li>
+                    <b style={{ color: text }}>↓ Export GCT</b> — downloads a GCT v1.2 file of the current view:
+                    the filtered rows and columns in their current sort order, using the active data series.
+                    The file can be opened in any tool that reads GCT format (Morpheus, GSEA, R/Python).
+                  </li>
+                  <li>
+                    <b style={{ color: text }}>Export TSV</b> (in the Compare Groups results panel) — downloads the ranked gene table
+                    (gene · score · p-value · FDR · mean A · mean B) as a tab-separated file.
+                  </li>
+                </ul>
+              </Section>
+
+              <Section title="9. Sessions — save and restore your work" accent={accent} border={border}>
+                <p>Sessions let you save your entire analysis state and reload it in a later visit — without having to redo sorting, filtering, or comparison setup.</p>
+                <p className="mt-2"><b>What a session saves:</b></p>
+                <ul className="list-disc ml-4 mt-1 flex flex-col gap-0.5" style={{ color: muted }}>
+                  <li>All annotation fields (including any you drag-dropped or added from comparison results)</li>
+                  <li>Sort order of rows and columns</li>
+                  <li>Active filters (annotation, value, ID-list)</li>
+                  <li>Visible annotation tracks, display modes, and custom category colors</li>
+                  <li>Color scale settings (preset, min/max overrides)</li>
+                  <li>Active series, dark/light mode</li>
+                </ul>
+                <p className="mt-2"><b>Note:</b> the raw matrix data is <i>not</i> stored in the session file — it is usually large. Load your data file first, then load the session on top to restore the view.</p>
+                <p className="mt-2"><b>To save:</b> click <b style={{ color: text }}>↓ Save Session</b>. A <code style={{ color: accent }}>.gitools.json</code> file is downloaded.</p>
+                <p className="mt-1"><b>To restore:</b> load the same data file first, then click <b style={{ color: text }}>↑ Load Session</b> and pick the saved JSON. The viewer validates that the file dimensions match before applying any changes.</p>
+                <p className="mt-2"><b>Shareable URL:</b> The URL automatically encodes your color scale preset, dark/light mode, and active series in the page hash (e.g. <code style={{ color: accent }}>#cmap=viridis&dark=1</code>). Bookmarking the URL or sharing it preserves those visual preferences — but the data file still needs to be re-loaded.</p>
+              </Section>
+
             </div>
           )}
 
@@ -304,7 +341,11 @@ export function HelpPanel({ onClose, isDark }: Props) {
                       ['Search gene…',     'Highlight matching rows and scroll to first match'],
                       ['⊘ Filter',         'Open the filter panel — filter rows/columns by value, % empty, or ID list'],
                       ['⚖ Compare Groups', 'Open the group comparison panel'],
-                      ['Light / Dark',     'Toggle background colour'],
+                      ['↓ Export PNG',     'Download the current heatmap view as a PNG image (custom pixel dimensions)'],
+                      ['↓ Export GCT',     'Download the filtered view as a GCT v1.2 file (active series, current sort order)'],
+                      ['↓ Save Session',   'Save annotations, sort order, filters, and view settings as a JSON file'],
+                      ['↑ Load Session',   'Restore a previously saved session JSON on top of the currently loaded data'],
+                      ['Light / Dark',     'Toggle background colour (also encoded in the bookmarkable URL hash)'],
                     ].map(([key, desc]) => (
                       <tr key={key} className="border-b" style={{ borderColor: border }}>
                         <td className="py-1.5 pr-4 whitespace-nowrap" style={{ color: accent }}>{key}</td>
