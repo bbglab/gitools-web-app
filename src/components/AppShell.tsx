@@ -1,11 +1,15 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import { HelpPanel } from './HelpPanel'
 
 interface AppShellProps {
   children: ReactNode
   onBack?: () => void
+  isDark?: boolean
 }
 
-export function AppShell({ children, onBack }: AppShellProps) {
+export function AppShell({ children, onBack, isDark = false }: AppShellProps) {
+  const [helpOpen, setHelpOpen] = useState(false)
+
   return (
     <div className="flex flex-col h-full bg-[--color-bg]">
       {/* Toolbar */}
@@ -22,12 +26,21 @@ export function AppShell({ children, onBack }: AppShellProps) {
         <span className="text-xs text-[--color-text-muted]">
           interactive heatmap explorer
         </span>
+        <div className="flex-1" />
+        <button
+          onClick={() => setHelpOpen(true)}
+          className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
+        >
+          ? Help
+        </button>
       </header>
 
       {/* Main content */}
       <main className="flex-1 min-h-0">
         {children}
       </main>
+
+      {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} isDark={isDark} />}
     </div>
   )
 }

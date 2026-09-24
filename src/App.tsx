@@ -11,6 +11,7 @@ export function App() {
   const [view, setView] = useState<AppView>('landing')
   const [dataset, setDataset] = useState<Dataset | null>(null)
   const [filename, setFilename] = useState<string>('')
+  const [isDark, setIsDark] = useState(false)
 
   function handleDatasetLoaded(ds: Dataset, name: string) {
     setDataset(ds)
@@ -29,7 +30,7 @@ export function App() {
   }
 
   return (
-    <AppShell onBack={view !== 'landing' ? handleBack : undefined}>
+    <AppShell onBack={view !== 'landing' ? handleBack : undefined} isDark={isDark}>
       {view === 'landing' && (
         <DropZone onDatasetLoaded={handleDatasetLoaded} />
       )}
@@ -42,7 +43,7 @@ export function App() {
         />
       )}
       {view === 'viewer' && dataset && (
-        <HeatmapViewer dataset={dataset} />
+        <HeatmapViewer dataset={dataset} onDarkModeChange={setIsDark} />
       )}
     </AppShell>
   )

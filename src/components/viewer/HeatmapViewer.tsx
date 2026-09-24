@@ -10,7 +10,6 @@ import { ColAnnotationTrack, RowAnnotationTrack, buildCategoryColors } from './A
 import { loadAnnotationTsv } from '../../io/AnnotationReader'
 import { GroupBuilder, TEST_OPTIONS } from '../comparison/GroupBuilder'
 import { ResultsPanel } from '../comparison/ResultsPanel'
-import { HelpPanel } from '../HelpPanel'
 import type { TestName, RowResult, WorkerRequest, WorkerResponse } from '../../stats/types'
 
 const ROW_LABEL_W  = 140
@@ -134,7 +133,7 @@ function uniqueValues(vec: Vector): string[] {
   return [...new Set(vec.values.filter(v => v != null).map(String))].sort()
 }
 
-export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
+export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset; onDarkModeChange?: (dark: boolean) => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
 
@@ -146,6 +145,8 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
 
   const [darkMode, setDarkMode] = useState(false)
   const theme = darkMode ? DARK_THEME : LIGHT_THEME
+
+  useEffect(() => { onDarkModeChange?.(darkMode) }, [darkMode, onDarkModeChange])
 
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 })
   const [viewState, setViewState]   = useState<ViewState>({
@@ -175,7 +176,6 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
   const [annotError,   setAnnotError]   = useState<string | null>(null)
 
   // ── Comparison state ─────────────────────────────────────────────────────────
-  const [helpOpen,        setHelpOpen]        = useState(false)
   const [compareOpen,     setCompareOpen]     = useState(false)
   const [annotField,      setAnnotField]      = useState('')
   const [groupAssignments, setGroupAssignments] = useState<Map<string, 'A' | 'B'>>(new Map())
@@ -897,13 +897,6 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           >
             {darkMode ? 'Light' : 'Dark'}
           </button>
-          <button
-            onClick={() => setHelpOpen(true)}
-            className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
-            title="Help"
-          >
-            ? Help
-          </button>
         </div>
 
         {/* ── Active filter status bar ── */}
@@ -1261,9 +1254,6 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           </>
         )}
       </div>
-
-      {/* ── Help modal ── */}
-      {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} isDark={darkMode} />}
 
       {/* ── Tooltip ── */}
       {tooltip && (
