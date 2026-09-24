@@ -379,6 +379,8 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
   // ── Sort (operates on full order, filter is applied on top) ──────────────────
   const [lastColSort, setLastColSort] = useState<{ dc: number; dir: 'asc' | 'desc' } | null>(null)
   const [lastRowSort, setLastRowSort] = useState<{ dr: number; dir: 'asc' | 'desc' } | null>(null)
+  const [selectedCols, setSelectedCols] = useState<Set<number>>(new Set())
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
 
   const sortBy = useCallback((axis: 'row' | 'col', fieldName: string, dir: 'asc' | 'desc') => {
     const meta = axis === 'row' ? dataset.rowMetadata : dataset.colMetadata
@@ -430,6 +432,48 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
     setTexVersion(v => v + 1)
     setViewState(vs => ({ ...vs, colOffset: 0 }))
   }, [dataset, activeSeries, lastRowSort])
+
+  // Sort rows by sum of values across selected columns
+  const sortRowsByColSum = useCallback((dir: 'asc' | 'desc') => {
+    if (selectedCols.size === 0) return
+    const cols = [...selectedCols]
+    const sorted = [...fullRowOrderRef.current].sort((a, b) => {
+      let sa = 0, sb = 0
+      for (const dc of cols) {
+        const va = dataset.getValue(a, dc, activeSeries)
+        const vb = dataset.getValue(b, dc, activeSeries)
+        if (!isNaN(va)) sa += va
+        if (!isNaN(vb)) sb += vb
+      }
+      return dir === 'desc' ? sb - sa : sa - sb
+    })
+    setRowOrder(sorted)
+    setLastColSort(null)
+    setLastRowSort(null)
+    setTexVersion(v => v + 1)
+    setViewState(vs => ({ ...vs, rowOffset: 0 }))
+  }, [dataset, activeSeries, selectedCols])
+
+  // Sort columns by sum of values across selected rows
+  const sortColsByRowSum = useCallback((dir: 'asc' | 'desc') => {
+    if (selectedRows.size === 0) return
+    const rows = [...selectedRows]
+    const sorted = [...fullColOrderRef.current].sort((a, b) => {
+      let sa = 0, sb = 0
+      for (const dr of rows) {
+        const va = dataset.getValue(dr, a, activeSeries)
+        const vb = dataset.getValue(dr, b, activeSeries)
+        if (!isNaN(va)) sa += va
+        if (!isNaN(vb)) sb += vb
+      }
+      return dir === 'desc' ? sb - sa : sa - sb
+    })
+    setColOrder(sorted)
+    setLastColSort(null)
+    setLastRowSort(null)
+    setTexVersion(v => v + 1)
+    setViewState(vs => ({ ...vs, colOffset: 0 }))
+  }, [dataset, activeSeries, selectedRows])
 
   // ── Filter helpers ────────────────────────────────────────────────────────────
   const quickFilterCol = useCallback((fieldName: string, value: string) => {
@@ -882,6 +926,68 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           </div>
         )}
 
+        {/* ── Sum-sort selection bar ── */}
+        {(selectedCols.size > 0 || selectedRows.size > 0) && (
+          <div className="flex items-center gap-3 px-3 py-0.5 shrink-0 text-[10px] font-mono border-b border-[--color-border]"
+            style={{ background: theme.surface2 }}>
+            {selectedCols.size > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span style={{ color: theme.checkActive }}>
+                  {selectedCols.size} col{selectedCols.size > 1 ? 's' : ''} selected
+                </span>
+                <span style={{ color: theme.textMuted }}>— sort rows by sum:</span>
+                <button
+                  onClick={() => sortRowsByColSum('desc')}
+                  className="px-1 rounded hover:opacity-70"
+                  style={{ color: theme.checkActive, border: `1px solid ${theme.checkBorder}` }}
+                  title="Sort rows descending by sum across selected columns"
+                >↓ high→low</button>
+                <button
+                  onClick={() => sortRowsByColSum('asc')}
+                  className="px-1 rounded hover:opacity-70"
+                  style={{ color: theme.checkActive, border: `1px solid ${theme.checkBorder}` }}
+                  title="Sort rows ascending by sum across selected columns"
+                >↑ low→high</button>
+                <button
+                  onClick={() => setSelectedCols(new Set())}
+                  className="hover:opacity-70"
+                  style={{ color: theme.textMuted }}
+                  title="Clear column selection"
+                >× clear</button>
+              </span>
+            )}
+            {selectedCols.size > 0 && selectedRows.size > 0 && (
+              <span style={{ color: theme.textMuted }}>│</span>
+            )}
+            {selectedRows.size > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span style={{ color: theme.checkActive }}>
+                  {selectedRows.size} row{selectedRows.size > 1 ? 's' : ''} selected
+                </span>
+                <span style={{ color: theme.textMuted }}>— sort cols by sum:</span>
+                <button
+                  onClick={() => sortColsByRowSum('desc')}
+                  className="px-1 rounded hover:opacity-70"
+                  style={{ color: theme.checkActive, border: `1px solid ${theme.checkBorder}` }}
+                  title="Sort columns descending by sum across selected rows"
+                >↓ high→low</button>
+                <button
+                  onClick={() => sortColsByRowSum('asc')}
+                  className="px-1 rounded hover:opacity-70"
+                  style={{ color: theme.checkActive, border: `1px solid ${theme.checkBorder}` }}
+                  title="Sort columns ascending by sum across selected rows"
+                >↑ low→high</button>
+                <button
+                  onClick={() => setSelectedRows(new Set())}
+                  className="hover:opacity-70"
+                  style={{ color: theme.textMuted }}
+                  title="Clear row selection"
+                >× clear</button>
+              </span>
+            )}
+          </div>
+        )}
+
         {/* ── Group overlay strip ── */}
         {groupOverlayValues && (
           <div className="flex shrink-0" style={{ marginLeft: ROW_LABEL_W + rowAnnotWidth }}>
@@ -942,12 +1048,14 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           <div style={{ width: ROW_LABEL_W + rowAnnotWidth, minWidth: ROW_LABEL_W + rowAnnotWidth }} />
           <div className="relative flex-1 overflow-hidden border-b border-[--color-border]">
             {Array.from({ length: endCol - startCol }, (_, i) => {
-              const vc      = startCol + i
-              const dc      = displayColOrder[vc]
-              const cx      = (vc - vs.colOffset) * vs.cellW + vs.cellW / 2
-              const label   = (colIdVec?.values[dc] as string | null) ?? `S${dc}`
-              const isActive = lastColSort?.dc === dc
-              const arrow   = isActive ? (lastColSort.dir === 'desc' ? ' ▼' : ' ▲') : ''
+              const vc         = startCol + i
+              const dc         = displayColOrder[vc]
+              const cx         = (vc - vs.colOffset) * vs.cellW + vs.cellW / 2
+              const label      = (colIdVec?.values[dc] as string | null) ?? `S${dc}`
+              const isActive   = lastColSort?.dc === dc
+              const isSelected = selectedCols.has(dc)
+              const arrow      = isActive ? (lastColSort.dir === 'desc' ? ' ▼' : ' ▲') : ''
+              const selMark    = isSelected ? ' ●' : ''
               return (
                 <div key={vc}
                   className="absolute text-xs font-mono cursor-pointer select-none hover:opacity-80"
@@ -955,13 +1063,23 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
                     left: cx, bottom: 6,
                     transform: 'rotate(-55deg)', transformOrigin: 'left bottom',
                     whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden',
-                    color: isActive ? theme.labelHighlight : theme.textMuted,
-                    fontWeight: isActive ? 'bold' : 'normal',
+                    color: isActive ? theme.labelHighlight : isSelected ? theme.checkActive : theme.textMuted,
+                    fontWeight: isActive || isSelected ? 'bold' : 'normal',
                   }}
-                  onClick={() => sortRowsByCol(dc)}
-                  title={`Sort genes by ${label}`}
+                  onClick={e => {
+                    if (e.shiftKey) {
+                      setSelectedCols(prev => {
+                        const next = new Set(prev)
+                        next.has(dc) ? next.delete(dc) : next.add(dc)
+                        return next
+                      })
+                    } else {
+                      sortRowsByCol(dc)
+                    }
+                  }}
+                  title={`Click: sort genes by ${label} · Shift+click: select for sum-sort`}
                 >
-                  {label}{arrow}
+                  {label}{arrow}{selMark}
                 </div>
               )
             })}
@@ -975,26 +1093,40 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           <div className="relative shrink-0 overflow-hidden border-r border-[--color-border]"
             style={{ width: ROW_LABEL_W, background: theme.bg }}>
             {showRowLbl && Array.from({ length: endRow - startRow }, (_, i) => {
-              const vr      = startRow + i
-              const dr      = displayRowOrder[vr]
-              const cy      = (vr - vs.rowOffset) * vs.cellH + vs.cellH / 2
-              const label   = (rowIdVec?.values[dr] as string | null) ?? `R${dr}`
-              const isMatch  = highlightedRows.has(dr)
-              const isActive = lastRowSort?.dr === dr
-              const arrow    = isActive ? (lastRowSort.dir === 'desc' ? '▼ ' : '▲ ') : ''
+              const vr         = startRow + i
+              const dr         = displayRowOrder[vr]
+              const cy         = (vr - vs.rowOffset) * vs.cellH + vs.cellH / 2
+              const label      = (rowIdVec?.values[dr] as string | null) ?? `R${dr}`
+              const isMatch    = highlightedRows.has(dr)
+              const isActive   = lastRowSort?.dr === dr
+              const isSelected = selectedRows.has(dr)
+              const arrow      = isActive ? (lastRowSort.dir === 'desc' ? '▼ ' : '▲ ') : ''
+              const selMark    = isSelected ? '● ' : ''
               return (
                 <div key={vr}
                   className="absolute right-2 font-mono truncate cursor-pointer select-none hover:opacity-80"
                   style={{
                     top: cy, maxWidth: ROW_LABEL_W - 10, transform: 'translateY(-50%)',
                     lineHeight: 1, fontSize: Math.min(12, vs.cellH * 0.75),
-                    color:      isMatch || isActive ? theme.labelHighlight : theme.labelColor,
-                    fontWeight: isMatch || isActive ? 'bold' : 'normal',
+                    color:      isMatch || isActive ? theme.labelHighlight
+                              : isSelected          ? theme.checkActive
+                              : theme.labelColor,
+                    fontWeight: isMatch || isActive || isSelected ? 'bold' : 'normal',
                   }}
-                  onClick={() => sortColsByRow(dr)}
-                  title={`Sort samples by ${label}`}
+                  onClick={e => {
+                    if (e.shiftKey) {
+                      setSelectedRows(prev => {
+                        const next = new Set(prev)
+                        next.has(dr) ? next.delete(dr) : next.add(dr)
+                        return next
+                      })
+                    } else {
+                      sortColsByRow(dr)
+                    }
+                  }}
+                  title={`Click: sort samples by ${label} · Shift+click: select for sum-sort`}
                 >
-                  {arrow}{label}
+                  {selMark}{arrow}{label}
                 </div>
               )
             })}
@@ -1303,7 +1435,7 @@ function ColorLegend({ vmin, vmax, surface }: { vmin: number; vmax: number; surf
         style={{ background: 'linear-gradient(to right, rgb(33,102,172), rgb(247,247,247), rgb(214,96,77))' }} />
       <span className="text-xs font-mono text-[--color-text-muted] tabular-nums w-12">{vmax.toFixed(2)}</span>
       <span className="text-xs text-[--color-text-muted] ml-2">
-        scroll rows · shift+scroll cols · ctrl+scroll zoom · drag to pan
+        scroll rows · shift+scroll cols · ctrl+scroll zoom · drag to pan · shift+click label to select for sum-sort
       </span>
     </div>
   )
