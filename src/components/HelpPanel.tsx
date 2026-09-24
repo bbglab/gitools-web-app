@@ -98,9 +98,17 @@ export function HelpPanel({ onClose, isDark }: Props) {
                 <ul className="list-disc ml-4 mt-1 flex flex-col gap-0.5" style={{ color: muted }}>
                   <li>Toggle visibility with the checkbox next to each field</li>
                   <li>Sort the heatmap by an annotation field using <b style={{ color: text }}>↑ ↓</b></li>
-                  <li>Filter by clicking on the annotation track strip above the heatmap</li>
-                  <li>Expand a field to show/hide individual categories</li>
+                  <li>Filter by clicking on the annotation track strip in the heatmap</li>
+                  <li>Click <b style={{ color: text }}>▶</b> to expand a field and show/hide individual categories</li>
                 </ul>
+                <p className="mt-2"><b>Choosing how to display an annotation</b></p>
+                <p className="mt-1">Each annotation has a <b style={{ color: text }}>C / T</b> toggle button (right of the field name):</p>
+                <ul className="list-disc ml-4 mt-1 flex flex-col gap-0.5" style={{ color: muted }}>
+                  <li><b style={{ color: text }}>C (color)</b> — the default. Each value is drawn as a colored block. Categorical annotations get automatic distinct colors; numeric annotations get a gradient.</li>
+                  <li><b style={{ color: text }}>T (text)</b> — the annotation track renders the actual value label for each cell instead of a color block. Useful when the annotation is a short code or number you need to read directly.</li>
+                </ul>
+                <p className="mt-2"><b>Changing category colors</b></p>
+                <p className="mt-1">In <b style={{ color: text }}>C (color)</b> mode, click <b style={{ color: text }}>▶</b> to expand the field. Each category value shows a small colored square to its left — click it to open a color picker and choose a custom color. The change is applied immediately to the annotation track.</p>
               </Section>
 
               <Section title="5. Search" accent={accent} border={border}>
@@ -286,8 +294,10 @@ export function HelpPanel({ onClose, isDark }: Props) {
                 <table className="w-full border-collapse">
                   <tbody>
                     {[
-                      ['Checkbox',            'Show/hide the annotation colour track in the heatmap'],
-                      ['▶ expand',            'Show individual category values to filter on/off'],
+                      ['Checkbox',            'Show/hide the annotation track in the heatmap'],
+                      ['▶ expand',            'Show individual category values to filter on/off, and color swatches'],
+                      ['C / T toggle',        'Switch between color mode (colored blocks) and text mode (value labels)'],
+                      ['Color swatch',        'In C mode: click the small square next to a category value to change its color'],
                       ['↑ / ↓ arrows',        'Sort all rows or columns by this annotation field'],
                       ['● orange dot',        'Filter is active on this field'],
                       ['× button',            'Clear filter for that field'],
