@@ -18,7 +18,7 @@ export function AppShell({ children, onBack }: AppShellProps) {
             ← Back
           </button>
         )}
-        <img src="/logo.png" alt="Gitools" className="h-8 w-auto" />
+        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Gitools" className="h-8 w-auto" />
         <span className="text-xs text-[--color-text-muted]">
           interactive heatmap explorer
         </span>
