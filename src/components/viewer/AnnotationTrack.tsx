@@ -30,10 +30,13 @@ interface ColTrackProps {
   colors?: Map<string, string>    // categorical color map (auto-built if absent)
   vmin?: number                   // for continuous tracks
   vmax?: number
+  displayMode?: 'color' | 'text'
+  textColor?: string
 }
 
 export function ColAnnotationTrack({
   values, colOrder, colOffset, cellW, height, colors, vmin, vmax,
+  displayMode = 'color', textColor = '#9ca3af',
 }: ColTrackProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -65,26 +68,46 @@ export function ColAnnotationTrack({
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     const nCols = colOrder.length
-    for (let vc = 0; vc < nCols; vc++) {
-      const x = (vc - colOffset) * cellW
-      if (x + cellW < 0 || x > cssW) continue
-      const dc  = colOrder[vc]
-      const val = values[dc]
-      if (val == null || val === '') continue
 
-      let color = '#555'
-      if (catColors) {
-        color = catColors.get(String(val)) ?? '#555'
-      } else {
-        const [mn, mx] = numericRange
-        const t = Math.max(0, Math.min(1, (Number(val) - mn) / (mx - mn)))
-        const r = Math.round(33 + (214 - 33) * t)
-        const g = Math.round(102 + (96 - 102) * t)
-        const b = Math.round(172 + (77 - 172) * t)
-        color = `rgb(${r},${g},${b})`
+    if (displayMode === 'text') {
+      ctx.font = `${10 * dpr}px monospace`
+      ctx.textBaseline = 'alphabetic'
+      ctx.textAlign = 'left'
+      ctx.fillStyle = textColor
+      for (let vc = 0; vc < nCols; vc++) {
+        const x = (vc - colOffset) * cellW
+        if (x + cellW < 0 || x > cssW) continue
+        const dc = colOrder[vc]
+        const val = values[dc]
+        if (val == null || val === '') continue
+        ctx.save()
+        ctx.translate(Math.round((x + cellW / 2) * dpr), canvas.height - 2 * dpr)
+        ctx.rotate(-Math.PI * 55 / 180)
+        ctx.fillText(String(val), 0, 0)
+        ctx.restore()
       }
-      ctx.fillStyle = color
-      ctx.fillRect(Math.round(x * dpr), 0, Math.max(1, Math.round(cellW * dpr)), canvas.height)
+    } else {
+      for (let vc = 0; vc < nCols; vc++) {
+        const x = (vc - colOffset) * cellW
+        if (x + cellW < 0 || x > cssW) continue
+        const dc  = colOrder[vc]
+        const val = values[dc]
+        if (val == null || val === '') continue
+
+        let color = '#555'
+        if (catColors) {
+          color = catColors.get(String(val)) ?? '#555'
+        } else {
+          const [mn, mx] = numericRange
+          const t = Math.max(0, Math.min(1, (Number(val) - mn) / (mx - mn)))
+          const r = Math.round(33 + (214 - 33) * t)
+          const g = Math.round(102 + (96 - 102) * t)
+          const b = Math.round(172 + (77 - 172) * t)
+          color = `rgb(${r},${g},${b})`
+        }
+        ctx.fillStyle = color
+        ctx.fillRect(Math.round(x * dpr), 0, Math.max(1, Math.round(cellW * dpr)), canvas.height)
+      }
     }
   })
 
@@ -107,10 +130,13 @@ interface RowTrackProps {
   colors?: Map<string, string>
   vmin?: number
   vmax?: number
+  displayMode?: 'color' | 'text'
+  textColor?: string
 }
 
 export function RowAnnotationTrack({
   values, rowOrder, rowOffset, cellH, width, colors, vmin, vmax,
+  displayMode = 'color', textColor = '#9ca3af',
 }: RowTrackProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -141,26 +167,43 @@ export function RowAnnotationTrack({
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     const nRows = rowOrder.length
-    for (let vr = 0; vr < nRows; vr++) {
-      const y = (vr - rowOffset) * cellH
-      if (y + cellH < 0 || y > cssH) continue
-      const dr  = rowOrder[vr]
-      const val = values[dr]
-      if (val == null || val === '') continue
 
-      let color = '#555'
-      if (catColors) {
-        color = catColors.get(String(val)) ?? '#555'
-      } else {
-        const [mn, mx] = numericRange
-        const t = Math.max(0, Math.min(1, (Number(val) - mn) / (mx - mn)))
-        const r = Math.round(33 + (214 - 33) * t)
-        const g = Math.round(102 + (96 - 102) * t)
-        const b = Math.round(172 + (77 - 172) * t)
-        color = `rgb(${r},${g},${b})`
+    if (displayMode === 'text') {
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'left'
+      ctx.fillStyle = textColor
+      for (let vr = 0; vr < nRows; vr++) {
+        const y = (vr - rowOffset) * cellH
+        if (y + cellH < 0 || y > cssH) continue
+        const dr = rowOrder[vr]
+        const val = values[dr]
+        if (val == null || val === '') continue
+        const fontSize = Math.max(8, Math.min(11, cellH * 0.8)) * dpr
+        ctx.font = `${fontSize}px monospace`
+        ctx.fillText(String(val), 4 * dpr, Math.round((y + cellH / 2) * dpr))
       }
-      ctx.fillStyle = color
-      ctx.fillRect(0, Math.round(y * dpr), canvas.width, Math.max(1, Math.round(cellH * dpr)))
+    } else {
+      for (let vr = 0; vr < nRows; vr++) {
+        const y = (vr - rowOffset) * cellH
+        if (y + cellH < 0 || y > cssH) continue
+        const dr  = rowOrder[vr]
+        const val = values[dr]
+        if (val == null || val === '') continue
+
+        let color = '#555'
+        if (catColors) {
+          color = catColors.get(String(val)) ?? '#555'
+        } else {
+          const [mn, mx] = numericRange
+          const t = Math.max(0, Math.min(1, (Number(val) - mn) / (mx - mn)))
+          const r = Math.round(33 + (214 - 33) * t)
+          const g = Math.round(102 + (96 - 102) * t)
+          const b = Math.round(172 + (77 - 172) * t)
+          color = `rgb(${r},${g},${b})`
+        }
+        ctx.fillStyle = color
+        ctx.fillRect(0, Math.round(y * dpr), canvas.width, Math.max(1, Math.round(cellH * dpr)))
+      }
     }
   })
 

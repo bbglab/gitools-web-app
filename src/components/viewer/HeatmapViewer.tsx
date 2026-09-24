@@ -16,6 +16,8 @@ const ROW_LABEL_W  = 140
 const COL_LABEL_H  = 90
 const TRACK_W      = 12
 const TRACK_H      = 12
+const TEXT_TRACK_W = 80
+const TEXT_TRACK_H = 60
 const MIN_CELL     = 1
 const MAX_CELL     = 120
 const DEFAULT_CELL = 14
@@ -174,6 +176,8 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   const [annotVersion, setAnnotVersion] = useState(0)
   const [annotLoading, setAnnotLoading] = useState(false)
   const [annotError,   setAnnotError]   = useState<string | null>(null)
+  const [trackDisplayModes, setTrackDisplayModes] = useState<Map<string, 'color' | 'text'>>(new Map())
+  const [customColors,      setCustomColors]      = useState<Map<string, Map<string, string>>>(new Map())
 
   // ── Comparison state ─────────────────────────────────────────────────────────
   const [compareOpen,     setCompareOpen]     = useState(false)
@@ -779,19 +783,49 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   const seriesCount   = dataset.getSeriesCount()
   const colAnnotShown = colAnnotVecs.filter(v => visColTracks.has(v.name))
   const rowAnnotShown = rowAnnotVecs.filter(v => visRowTracks.has(v.name))
-  const rowAnnotWidth = rowAnnotShown.length * TRACK_W
+  const rowAnnotWidth = rowAnnotShown.reduce(
+    (sum, vec) => sum + (trackDisplayModes.get(vec.name) === 'text' ? TEXT_TRACK_W : TRACK_W), 0,
+  )
 
-  const catColorMaps = useMemo(() => {
+  const effectiveColorMaps = useMemo(() => {
     const m = new Map<string, Map<string, string>>()
     ;[...colAnnotVecs, ...rowAnnotVecs].forEach(v => {
-      if (v.dataType === 'string') m.set(v.name, buildCategoryColors(v.values))
+      if (v.dataType === 'string') {
+        const base   = buildCategoryColors(v.values)
+        const custom = customColors.get(v.name)
+        if (custom?.size) {
+          const merged = new Map(base)
+          custom.forEach((col, cat) => merged.set(cat, col))
+          m.set(v.name, merged)
+        } else {
+          m.set(v.name, base)
+        }
+      }
     })
     return m
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataset, annotVersion])
+  }, [dataset, annotVersion, customColors])
 
   const hasPValue  = TEST_OPTIONS.find(t => t.value === compareTest)?.hasPValue ?? true
   const anyFilters = rowFilters.size > 0 || colFilters.size > 0
+
+  const handleToggleDisplayMode = useCallback((name: string) => {
+    setTrackDisplayModes(prev => {
+      const next = new Map(prev)
+      next.get(name) === 'text' ? next.delete(name) : next.set(name, 'text')
+      return next
+    })
+  }, [])
+
+  const handleColorChange = useCallback((fieldName: string, category: string, color: string) => {
+    setCustomColors(prev => {
+      const next     = new Map(prev)
+      const fieldMap = new Map(next.get(fieldName) ?? [])
+      fieldMap.set(category, color)
+      next.set(fieldName, fieldMap)
+      return next
+    })
+  }, [])
 
   const searchBorderColor = search.trim()
     ? (highlightedRows.size > 0 ? '#f59e0b' : '#ef4444')
@@ -825,6 +859,10 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
               onToggleValue={toggleColValue}
               onClearFilter={clearColFilter}
               theme={theme}
+              trackDisplayModes={trackDisplayModes}
+              onToggleDisplayMode={handleToggleDisplayMode}
+              colorMaps={effectiveColorMaps}
+              onColorChange={handleColorChange}
             />
             <SidebarSection
               title="Row annotations"
@@ -840,6 +878,10 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
               onToggleValue={toggleRowValue}
               onClearFilter={clearRowFilter}
               theme={theme}
+              trackDisplayModes={trackDisplayModes}
+              onToggleDisplayMode={handleToggleDisplayMode}
+              colorMaps={effectiveColorMaps}
+              onColorChange={handleColorChange}
             />
           </div>
         )}
@@ -1012,11 +1054,13 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
         {colAnnotShown.length > 0 && (
           <div className="flex flex-col shrink-0" style={{ marginLeft: ROW_LABEL_W + rowAnnotWidth }}>
             {colAnnotShown.map(vec => {
-              const hasFilter = colFilters.has(vec.name)
+              const hasFilter  = colFilters.has(vec.name)
+              const trackMode  = trackDisplayModes.get(vec.name) ?? 'color'
+              const trackH     = trackMode === 'text' ? TEXT_TRACK_H : TRACK_H
               return (
                 <div key={vec.name}
                   className="relative overflow-hidden"
-                  style={{ height: TRACK_H, cursor: 'pointer' }}
+                  style={{ height: trackH, cursor: 'pointer' }}
                   title={`Click to filter columns by ${vec.name}`}
                   onClick={e => {
                     const rect = e.currentTarget.getBoundingClientRect()
@@ -1032,8 +1076,10 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
                     colOrder={displayColOrder}
                     colOffset={vs.colOffset}
                     cellW={vs.cellW}
-                    height={TRACK_H}
-                    colors={catColorMaps.get(vec.name)}
+                    height={trackH}
+                    colors={effectiveColorMaps.get(vec.name)}
+                    displayMode={trackMode}
+                    textColor={theme.labelColor}
                   />
                   <div className="absolute left-1 top-0 text-[9px] leading-tight truncate pointer-events-none"
                     style={{ maxWidth: 80, color: hasFilter ? theme.filterColor : theme.textMuted }}>
@@ -1137,10 +1183,12 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
           {/* Row annotation tracks */}
           {rowAnnotShown.map(vec => {
             const hasFilter = rowFilters.has(vec.name)
+            const trackMode = trackDisplayModes.get(vec.name) ?? 'color'
+            const trackW    = trackMode === 'text' ? TEXT_TRACK_W : TRACK_W
             return (
               <div key={vec.name}
                 className="relative shrink-0 overflow-hidden"
-                style={{ width: TRACK_W, cursor: 'pointer' }}
+                style={{ width: trackW, cursor: 'pointer' }}
                 title={`Click to filter rows by ${vec.name}`}
                 onClick={e => {
                   const rect = e.currentTarget.getBoundingClientRect()
@@ -1156,8 +1204,10 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
                   rowOrder={displayRowOrder}
                   rowOffset={vs.rowOffset}
                   cellH={vs.cellH}
-                  width={TRACK_W}
-                  colors={catColorMaps.get(vec.name)}
+                  width={trackW}
+                  colors={effectiveColorMaps.get(vec.name)}
+                  displayMode={trackMode}
+                  textColor={theme.labelColor}
                 />
                 {hasFilter && (
                   <div className="absolute top-1 left-0 right-0 text-center text-[8px] pointer-events-none"
@@ -1282,6 +1332,7 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
 function SidebarSection({
   title, vecs, visible, onToggle, onSelectAll, onDeselectAll, onSort, onDrop, loading,
   filters, onToggleValue, onClearFilter, theme,
+  trackDisplayModes, onToggleDisplayMode, colorMaps, onColorChange,
 }: {
   title: string
   vecs: Vector[]
@@ -1296,6 +1347,10 @@ function SidebarSection({
   onToggleValue: (field: string, value: string) => void
   onClearFilter: (field: string) => void
   theme: Theme
+  trackDisplayModes: Map<string, 'color' | 'text'>
+  onToggleDisplayMode: (name: string) => void
+  colorMaps: Map<string, Map<string, string>>
+  onColorChange: (fieldName: string, category: string, color: string) => void
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
@@ -1328,11 +1383,12 @@ function SidebarSection({
       )}
 
       {vecs.map(vec => {
-        const isExpanded  = expanded.has(vec.name)
-        const hasFilter   = filters.has(vec.name)
+        const isExpanded   = expanded.has(vec.name)
+        const hasFilter    = filters.has(vec.name)
         const activeFilter = filters.get(vec.name)
-        const vals        = uniqueValues(vec)
-        const isString    = vec.dataType === 'string' && vals.length > 0
+        const vals         = uniqueValues(vec)
+        const isString     = vec.dataType === 'string' && vals.length > 0
+        const displayMode  = trackDisplayModes.get(vec.name) ?? 'color'
 
         return (
           <div key={vec.name}>
@@ -1363,6 +1419,18 @@ function SidebarSection({
               {hasFilter && (
                 <span className="text-[10px]" style={{ color: theme.filterColor }}>●</span>
               )}
+              {/* text / color display mode toggle */}
+              <button
+                onClick={() => onToggleDisplayMode(vec.name)}
+                className="text-[9px] px-0.5 rounded flex-shrink-0"
+                style={{
+                  color:       displayMode === 'text' ? theme.checkActive : theme.textMuted,
+                  border:      `1px solid ${displayMode === 'text' ? theme.checkBorder : 'transparent'}`,
+                }}
+                title={`Show as ${displayMode === 'text' ? 'color' : 'text'}`}
+              >
+                {displayMode === 'text' ? 'T' : 'C'}
+              </button>
               <button onClick={() => onSort(vec.name, 'asc')}
                 className="text-[--color-text-muted] hover:text-[--color-text] px-0.5">↑</button>
               <button onClick={() => onSort(vec.name, 'desc')}
@@ -1375,7 +1443,7 @@ function SidebarSection({
               )}
             </div>
 
-            {/* Expanded value checkboxes */}
+            {/* Expanded value list */}
             {isExpanded && isString && (
               <div className="ml-5 mb-1">
                 <div className="flex gap-2 mb-0.5">
@@ -1386,7 +1454,8 @@ function SidebarSection({
                 </div>
                 <div className="flex flex-col gap-0.5 max-h-36 overflow-y-auto pr-1">
                   {vals.map(val => {
-                    const included = !activeFilter || activeFilter.has(val)
+                    const included  = !activeFilter || activeFilter.has(val)
+                    const catColor  = colorMaps.get(vec.name)?.get(val) ?? '#555555'
                     return (
                       <div key={val} className="flex items-center gap-1">
                         <button
@@ -1397,6 +1466,28 @@ function SidebarSection({
                             borderColor: theme.checkBorder,
                           }}
                         />
+                        {/* color swatch with picker — only in color mode */}
+                        {displayMode === 'color' && (
+                          <label
+                            style={{
+                              width: 12, height: 12, display: 'block', flexShrink: 0,
+                              background: catColor,
+                              border: '1px solid rgba(128,128,128,0.3)',
+                              borderRadius: 2, cursor: 'pointer', position: 'relative',
+                            }}
+                            title={`Change color for "${val}"`}
+                          >
+                            <input
+                              type="color"
+                              value={catColor}
+                              onChange={e => onColorChange(vec.name, val, e.target.value)}
+                              style={{
+                                opacity: 0, position: 'absolute', width: 0, height: 0,
+                                top: 0, left: 0,
+                              }}
+                            />
+                          </label>
+                        )}
                         <span
                           className="truncate text-[10px] cursor-pointer"
                           style={{ color: included ? theme.valueActive : theme.valueInactive }}
