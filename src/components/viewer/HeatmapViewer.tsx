@@ -234,6 +234,13 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   const [trackDisplayModes, setTrackDisplayModes] = useState<Map<string, 'color' | 'text'>>(new Map())
   const [customColors,      setCustomColors]      = useState<Map<string, Map<string, string>>>(new Map())
 
+  // ── Export state ─────────────────────────────────────────────────────────────
+  const [exportOpen,    setExportOpen]    = useState(false)
+  const [exportW,       setExportW]       = useState(0)   // 0 = auto-init on open
+  const [exportH,       setExportH]       = useState(0)
+  const [exportLightBg, setExportLightBg] = useState(true)
+  const [exportLoading, setExportLoading] = useState(false)
+
   // ── Comparison state ─────────────────────────────────────────────────────────
   const [compareOpen,     setCompareOpen]     = useState(false)
   const [annotField,      setAnnotField]      = useState('')
@@ -669,6 +676,60 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
     setViewState(vs => ({ ...vs, rowOffset: 0, colOffset: 0 }))
   }, [])
 
+  // ── Export PNG ───────────────────────────────────────────────────────────────
+  const exportHeatmapPng = useCallback(() => {
+    const nRows = displayRowOrder.length
+    const nCols = displayColOrder.length
+    if (nRows === 0 || nCols === 0) return
+    setExportLoading(true)
+    // Defer to next tick so React can re-render the loading state first
+    setTimeout(() => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width  = exportW
+        canvas.height = exportH
+        const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true })
+        if (!gl) { alert('WebGL2 not available for export'); return }
+        const prog = createProgram(gl)
+        const { texture: dTex, texW, texH, tilingK } = uploadDataTexture(
+          gl, dataset, activeSeries, displayRowOrder, displayColOrder,
+        )
+        const cTex = uploadColormapTexture(gl)
+        gl.viewport(0, 0, exportW, exportH)
+        const [cr, cg, cb, ca] = exportLightBg ? LIGHT_THEME.clearColor : DARK_THEME.clearColor
+        gl.clearColor(cr, cg, cb, ca)
+        gl.clear(gl.COLOR_BUFFER_BIT)
+        gl.useProgram(prog)
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, dTex)
+        gl.uniform1i(gl.getUniformLocation(prog, 'u_data'), 0)
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, cTex)
+        gl.uniform1i(gl.getUniformLocation(prog, 'u_colormap'), 1)
+        gl.uniform2f(gl.getUniformLocation(prog, 'u_dataSize'),   nCols, nRows)
+        gl.uniform2f(gl.getUniformLocation(prog, 'u_texSize'),    texW, texH)
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_tilingK'),    tilingK)
+        gl.uniform2f(gl.getUniformLocation(prog, 'u_canvasSize'), exportW, exportH)
+        gl.uniform2f(gl.getUniformLocation(prog, 'u_cellSize'),   exportW / nCols, exportH / nRows)
+        gl.uniform2f(gl.getUniformLocation(prog, 'u_offset'),     0, 0)
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_vmin'),       colorRange[0])
+        gl.uniform1f(gl.getUniformLocation(prog, 'u_vmax'),       colorRange[1])
+        gl.uniform4f(gl.getUniformLocation(prog, 'u_bgColor'),    cr, cg, cb, ca)
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+        const seriesName = dataset.seriesNames[activeSeries] ?? 'heatmap'
+        const filename   = `heatmap_${nRows}x${nCols}_${seriesName}.png`
+        canvas.toBlob(blob => {
+          if (!blob) return
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a'); a.href = url; a.download = filename
+          a.click(); URL.revokeObjectURL(url)
+        }, 'image/png')
+        gl.deleteTexture(dTex); gl.deleteTexture(cTex); gl.deleteProgram(prog)
+      } finally {
+        setExportLoading(false)
+        setExportOpen(false)
+      }
+    }, 30)
+  }, [dataset, activeSeries, displayRowOrder, displayColOrder, colorRange, exportW, exportH, exportLightBg])
+
   // ── Clamp (uses display counts) ───────────────────────────────────────────────
   const clampOffset = useCallback((vs: ViewState, co: number, ro: number, w: number, h: number) => ({
     colOffset: Math.max(0, Math.min(Math.max(0, displayColOrderRef.current.length - w / vs.cellW), co)),
@@ -1063,6 +1124,22 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
               : { background: theme.cmpIdle.background,   color: theme.cmpIdle.color,   borderColor: theme.cmpIdle.borderColor }}
           >
             ⚖ Compare Groups
+          </button>
+          <button
+            onClick={() => {
+              // Set sensible defaults based on current data dimensions
+              const nRows = displayRowOrder.length
+              const nCols = displayColOrder.length
+              if (exportW === 0) {
+                setExportW(Math.min(4000, Math.max(400, nCols * 8)))
+                setExportH(Math.min(16000, Math.max(400, nRows * 2)))
+              }
+              setExportOpen(o => !o)
+            }}
+            className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
+            title="Export heatmap as PNG"
+          >
+            ↓ Export PNG
           </button>
           <button
             onClick={() => setDarkMode(d => !d)}
@@ -1464,6 +1541,80 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
       </div>
 
       {/* ── Filter panel ── */}
+      {/* ── Export modal ── */}
+      {exportOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) setExportOpen(false) }}
+        >
+          <div className="rounded-lg shadow-2xl flex flex-col"
+            style={{ background: theme.bg, border: `1px solid ${darkMode ? '#2a2a45' : '#e0e0e0'}`, width: 340, overflow: 'hidden' }}>
+            {/* header */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b text-xs font-semibold"
+              style={{ background: theme.surface, borderColor: darkMode ? '#2a2a45' : '#e0e0e0', color: darkMode ? '#a0a8ff' : '#2563eb' }}>
+              Export heatmap as PNG
+              <button onClick={() => setExportOpen(false)} className="hover:opacity-70 font-normal text-base leading-none" style={{ color: darkMode ? '#6b7280' : '#6b7280' }}>×</button>
+            </div>
+            {/* body */}
+            <div className="px-4 py-3 flex flex-col gap-3 text-xs font-mono" style={{ color: darkMode ? '#e2e8f0' : '#1a1a1a' }}>
+              <div className="text-[10px]" style={{ color: darkMode ? '#6b7280' : '#6b7280' }}>
+                Renders all <b style={{ color: darkMode ? '#e2e8f0' : '#1a1a1a' }}>{displayRowOrder.length} rows × {displayColOrder.length} cols</b> currently visible (with active filters and sort order), series: <b style={{ color: darkMode ? '#e2e8f0' : '#1a1a1a' }}>{dataset.seriesNames[activeSeries]}</b>.
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="w-20 shrink-0" style={{ color: darkMode ? '#9ca3af' : '#6b7280' }}>Width (px)</label>
+                <input type="number" min={100} max={32000} step={100}
+                  value={exportW}
+                  onFocus={e => e.target.select()}
+                  onChange={e => { const n = parseInt(e.target.value); if (!isNaN(n) && n > 0) setExportW(n) }}
+                  className="flex-1 rounded px-2 py-0.5 text-xs font-mono"
+                  style={{ background: darkMode ? '#0f0f22' : '#fff', color: darkMode ? '#e2e8f0' : '#1a1a1a', border: `1px solid ${darkMode ? '#2a2a45' : '#e0e0e0'}`, outline: 'none' }}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="w-20 shrink-0" style={{ color: darkMode ? '#9ca3af' : '#6b7280' }}>Height (px)</label>
+                <input type="number" min={100} max={32000} step={100}
+                  value={exportH}
+                  onFocus={e => e.target.select()}
+                  onChange={e => { const n = parseInt(e.target.value); if (!isNaN(n) && n > 0) setExportH(n) }}
+                  className="flex-1 rounded px-2 py-0.5 text-xs font-mono"
+                  style={{ background: darkMode ? '#0f0f22' : '#fff', color: darkMode ? '#e2e8f0' : '#1a1a1a', border: `1px solid ${darkMode ? '#2a2a45' : '#e0e0e0'}`, outline: 'none' }}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="w-20 shrink-0" style={{ color: darkMode ? '#9ca3af' : '#6b7280' }}>Background</label>
+                <div className="flex gap-1">
+                  {([['White', true], ['Dark', false]] as [string, boolean][]).map(([label, val]) => (
+                    <button key={label} onClick={() => setExportLightBg(val)}
+                      className="px-2 py-0.5 rounded text-xs border transition-colors"
+                      style={exportLightBg === val
+                        ? { background: darkMode ? '#2a2a6e' : '#dbeafe', color: darkMode ? '#a0a8ff' : '#1d4ed8', borderColor: darkMode ? '#4040a0' : '#93c5fd' }
+                        : { background: 'transparent', color: darkMode ? '#6b7280' : '#6b7280', borderColor: darkMode ? '#2a2a45' : '#e0e0e0' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="text-[10px]" style={{ color: darkMode ? '#4b5563' : '#9ca3af' }}>
+                Output: {exportW} × {exportH} px · {((exportW * exportH * 4) / 1e6).toFixed(1)} MB uncompressed
+              </div>
+            </div>
+            {/* footer */}
+            <div className="px-4 py-2.5 border-t flex justify-end"
+              style={{ background: theme.surface, borderColor: darkMode ? '#2a2a45' : '#e0e0e0' }}>
+              <button
+                onClick={exportHeatmapPng}
+                disabled={exportLoading}
+                className="px-3 py-1 rounded text-xs font-semibold border transition-colors disabled:opacity-50"
+                style={{ background: darkMode ? '#2a2a6e' : '#dbeafe', color: darkMode ? '#a0a8ff' : '#1d4ed8', borderColor: darkMode ? '#4040a0' : '#93c5fd' }}
+              >
+                {exportLoading ? 'Rendering…' : '↓ Download PNG'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {filterPanelOpen && (
         <FilterPanel
           seriesNames={dataset.seriesNames}
