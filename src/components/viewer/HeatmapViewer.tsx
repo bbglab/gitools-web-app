@@ -7,6 +7,8 @@ import {
 } from './webgl'
 import type { DataTextureResult } from './webgl'
 import { ColAnnotationTrack, RowAnnotationTrack, buildCategoryColors } from './AnnotationTrack'
+import { FilterPanel, OP_LABELS } from './FilterPanel'
+import type { ValueFilterRule, IdFilterConfig } from './FilterPanel'
 import { loadAnnotationTsv } from '../../io/AnnotationReader'
 import { GroupBuilder, TEST_OPTIONS } from '../comparison/GroupBuilder'
 import { ResultsPanel } from '../comparison/ResultsPanel'
@@ -135,6 +137,50 @@ function uniqueValues(vec: Vector): string[] {
   return [...new Set(vec.values.filter(v => v != null).map(String))].sort()
 }
 
+// ── Value-filter helpers ──────────────────────────────────────────────────────
+
+function rowAgg(dataset: Dataset, dr: number, series: number, agg: ValueFilterRule['aggregate']): number {
+  const n = dataset.colCount
+  let sum = 0, cnt = 0, mn = Infinity, mx = -Infinity, ne = 0
+  for (let dc = 0; dc < n; dc++) {
+    const v = dataset.getValue(dr, dc, series)
+    if (isNaN(v)) { ne++; continue }
+    sum += v; cnt++
+    if (v < mn) mn = v
+    if (v > mx) mx = v
+  }
+  if (agg === 'mean')      return cnt > 0 ? sum / cnt : NaN
+  if (agg === 'min')       return mn < Infinity ? mn : NaN
+  if (agg === 'max')       return mx > -Infinity ? mx : NaN
+  return n > 0 ? (ne / n) * 100 : 0  // pct_empty
+}
+
+function colAgg(dataset: Dataset, dc: number, series: number, agg: ValueFilterRule['aggregate']): number {
+  const n = dataset.rowCount
+  let sum = 0, cnt = 0, mn = Infinity, mx = -Infinity, ne = 0
+  for (let dr = 0; dr < n; dr++) {
+    const v = dataset.getValue(dr, dc, series)
+    if (isNaN(v)) { ne++; continue }
+    sum += v; cnt++
+    if (v < mn) mn = v
+    if (v > mx) mx = v
+  }
+  if (agg === 'mean')      return cnt > 0 ? sum / cnt : NaN
+  if (agg === 'min')       return mn < Infinity ? mn : NaN
+  if (agg === 'max')       return mx > -Infinity ? mx : NaN
+  return n > 0 ? (ne / n) * 100 : 0  // pct_empty
+}
+
+function passesOp(v: number, op: ValueFilterRule['operator'], t: number): boolean {
+  if (isNaN(v)) return false
+  if (op === '>')  return v > t
+  if (op === '<')  return v < t
+  if (op === '>=') return v >= t
+  if (op === '<=') return v <= t
+  if (op === '==') return v === t
+  return v !== t
+}
+
 export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset; onDarkModeChange?: (dark: boolean) => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef    = useRef<HTMLCanvasElement>(null)
@@ -160,9 +206,15 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   const [rowOrder, setRowOrder] = useState<number[]>(() => identity(dataset.rowCount))
   const [colOrder, setColOrder] = useState<number[]>(() => identity(dataset.colCount))
 
-  // Filters — fieldName → Set of allowed values (absent = all shown)
+  // Annotation filters — fieldName → Set of allowed values (absent = all shown)
   const [rowFilters, setRowFilters] = useState<Map<string, Set<string>>>(new Map())
   const [colFilters, setColFilters] = useState<Map<string, Set<string>>>(new Map())
+  // Value + ID filters
+  const [rowValueFilters, setRowValueFilters] = useState<ValueFilterRule[]>([])
+  const [colValueFilters, setColValueFilters] = useState<ValueFilterRule[]>([])
+  const [rowIdFilter,     setRowIdFilter]     = useState<IdFilterConfig | null>(null)
+  const [colIdFilter,     setColIdFilter]     = useState<IdFilterConfig | null>(null)
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false)
 
   const [texVersion, setTexVersion] = useState(0)
   const [tooltip, setTooltip]       = useState<Tooltip | null>(null)
@@ -192,32 +244,68 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
 
   // ── Derived: filtered display orders ─────────────────────────────────────────
   const displayRowOrder = useMemo(() => {
-    if (rowFilters.size === 0) return rowOrder
-    return rowOrder.filter(dr => {
-      for (const [field, allowed] of rowFilters) {
-        const vec = dataset.rowMetadata.getVector(field)
-        if (!vec) continue
-        const val = vec.values[dr]
-        if (val == null || !allowed.has(String(val))) return false
-      }
-      return true
-    })
+    let order = rowOrder
+
+    if (rowFilters.size > 0) {
+      order = order.filter(dr => {
+        for (const [field, allowed] of rowFilters) {
+          const vec = dataset.rowMetadata.getVector(field)
+          if (!vec) continue
+          const val = vec.values[dr]
+          if (val == null || !allowed.has(String(val))) return false
+        }
+        return true
+      })
+    }
+
+    for (const rule of rowValueFilters) {
+      order = order.filter(dr => passesOp(rowAgg(dataset, dr, rule.series, rule.aggregate), rule.operator, rule.threshold))
+    }
+
+    if (rowIdFilter) {
+      const idVec = dataset.rowMetadata.getVector('id')
+      const { ids, mode } = rowIdFilter
+      order = order.filter(dr => {
+        const id = String(idVec?.values[dr] ?? '')
+        return mode === 'include' ? ids.has(id) : !ids.has(id)
+      })
+    }
+
+    return order
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rowOrder, rowFilters, dataset, annotVersion])
+  }, [rowOrder, rowFilters, rowValueFilters, rowIdFilter, dataset, annotVersion])
 
   const displayColOrder = useMemo(() => {
-    if (colFilters.size === 0) return colOrder
-    return colOrder.filter(dc => {
-      for (const [field, allowed] of colFilters) {
-        const vec = dataset.colMetadata.getVector(field)
-        if (!vec) continue
-        const val = vec.values[dc]
-        if (val == null || !allowed.has(String(val))) return false
-      }
-      return true
-    })
+    let order = colOrder
+
+    if (colFilters.size > 0) {
+      order = order.filter(dc => {
+        for (const [field, allowed] of colFilters) {
+          const vec = dataset.colMetadata.getVector(field)
+          if (!vec) continue
+          const val = vec.values[dc]
+          if (val == null || !allowed.has(String(val))) return false
+        }
+        return true
+      })
+    }
+
+    for (const rule of colValueFilters) {
+      order = order.filter(dc => passesOp(colAgg(dataset, dc, rule.series, rule.aggregate), rule.operator, rule.threshold))
+    }
+
+    if (colIdFilter) {
+      const idVec = dataset.colMetadata.getVector('id')
+      const { ids, mode } = colIdFilter
+      order = order.filter(dc => {
+        const id = String(idVec?.values[dc] ?? '')
+        return mode === 'include' ? ids.has(id) : !ids.has(id)
+      })
+    }
+
+    return order
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colOrder, colFilters, dataset, annotVersion])
+  }, [colOrder, colFilters, colValueFilters, colIdFilter, dataset, annotVersion])
 
   const colorRange = useMemo(
     () => computeColorRange(dataset, activeSeries),
@@ -563,6 +651,10 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
   const clearAllFilters = useCallback(() => {
     setRowFilters(new Map())
     setColFilters(new Map())
+    setRowValueFilters([])
+    setColValueFilters([])
+    setRowIdFilter(null)
+    setColIdFilter(null)
     setTexVersion(v => v + 1)
     setViewState(vs => ({ ...vs, rowOffset: 0, colOffset: 0 }))
   }, [])
@@ -808,6 +900,22 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
 
   const hasPValue  = TEST_OPTIONS.find(t => t.value === compareTest)?.hasPValue ?? true
   const anyFilters = rowFilters.size > 0 || colFilters.size > 0
+    || rowValueFilters.length > 0 || colValueFilters.length > 0
+    || rowIdFilter !== null || colIdFilter !== null
+
+  // Callbacks for FilterPanel — each increments texVersion to re-upload the data texture
+  const handleRowValueFiltersChange = useCallback((rules: ValueFilterRule[]) => {
+    setRowValueFilters(rules); setTexVersion(v => v + 1); setViewState(vs => ({ ...vs, rowOffset: 0 }))
+  }, [])
+  const handleColValueFiltersChange = useCallback((rules: ValueFilterRule[]) => {
+    setColValueFilters(rules); setTexVersion(v => v + 1); setViewState(vs => ({ ...vs, colOffset: 0 }))
+  }, [])
+  const handleRowIdFilterChange = useCallback((f: IdFilterConfig | null) => {
+    setRowIdFilter(f); setTexVersion(v => v + 1); setViewState(vs => ({ ...vs, rowOffset: 0 }))
+  }, [])
+  const handleColIdFilterChange = useCallback((f: IdFilterConfig | null) => {
+    setColIdFilter(f); setTexVersion(v => v + 1); setViewState(vs => ({ ...vs, colOffset: 0 }))
+  }, [])
 
   const handleToggleDisplayMode = useCallback((name: string) => {
     setTrackDisplayModes(prev => {
@@ -924,6 +1032,20 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
             style={{ border: `1px solid ${searchBorderColor}` }}
           />
           <button
+            onClick={() => setFilterPanelOpen(o => !o)}
+            className="text-xs px-2 py-0.5 rounded border transition-colors"
+            style={filterPanelOpen
+              ? { background: theme.cmpActive.background, color: theme.cmpActive.color, borderColor: theme.cmpActive.borderColor }
+              : { background: theme.cmpIdle.background,   color: theme.cmpIdle.color,   borderColor: theme.cmpIdle.borderColor }}
+          >
+            {'⚗ Filter'}
+            {(rowValueFilters.length + colValueFilters.length + (rowIdFilter ? 1 : 0) + (colIdFilter ? 1 : 0)) > 0 && (
+              <span className="ml-1 font-semibold">
+                ({rowValueFilters.length + colValueFilters.length + (rowIdFilter ? 1 : 0) + (colIdFilter ? 1 : 0)})
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => setCompareOpen(o => !o)}
             className="text-xs px-2 py-0.5 rounded border transition-colors"
             style={compareOpen
@@ -943,23 +1065,49 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
 
         {/* ── Active filter status bar ── */}
         {anyFilters && (
-          <div className="flex items-center gap-2 px-3 py-0.5 shrink-0 text-[10px] font-mono border-b border-[--color-border]"
+          <div className="flex items-center gap-2 px-3 py-0.5 shrink-0 text-[10px] font-mono border-b border-[--color-border] flex-wrap"
             style={{ background: theme.surface2 }}>
             <span style={{ color: theme.filterColor }}>Filters active:</span>
             {[...colFilters.entries()].map(([field, vals]) => (
               <span key={`c:${field}`} className="flex items-center gap-1"
                 style={{ color: theme.filterColor }}>
-                {field} ({vals.size})
+                col:{field} ({vals.size})
                 <button onClick={() => clearColFilter(field)} className="hover:opacity-70">×</button>
               </span>
             ))}
             {[...rowFilters.entries()].map(([field, vals]) => (
               <span key={`r:${field}`} className="flex items-center gap-1"
                 style={{ color: theme.filterColor }}>
-                {field} ({vals.size})
+                row:{field} ({vals.size})
                 <button onClick={() => clearRowFilter(field)} className="hover:opacity-70">×</button>
               </span>
             ))}
+            {rowValueFilters.map(r => (
+              <span key={`rv:${r.id}`} className="flex items-center gap-1"
+                style={{ color: theme.filterColor }}>
+                row {r.aggregate} {OP_LABELS[r.operator]} {r.threshold}
+                <button onClick={() => handleRowValueFiltersChange(rowValueFilters.filter(x => x.id !== r.id))} className="hover:opacity-70">×</button>
+              </span>
+            ))}
+            {colValueFilters.map(r => (
+              <span key={`cv:${r.id}`} className="flex items-center gap-1"
+                style={{ color: theme.filterColor }}>
+                col {r.aggregate} {OP_LABELS[r.operator]} {r.threshold}
+                <button onClick={() => handleColValueFiltersChange(colValueFilters.filter(x => x.id !== r.id))} className="hover:opacity-70">×</button>
+              </span>
+            ))}
+            {rowIdFilter && (
+              <span className="flex items-center gap-1" style={{ color: theme.filterColor }}>
+                rows: {rowIdFilter.ids.size} IDs ({rowIdFilter.mode})
+                <button onClick={() => handleRowIdFilterChange(null)} className="hover:opacity-70">×</button>
+              </span>
+            )}
+            {colIdFilter && (
+              <span className="flex items-center gap-1" style={{ color: theme.filterColor }}>
+                cols: {colIdFilter.ids.size} IDs ({colIdFilter.mode})
+                <button onClick={() => handleColIdFilterChange(null)} className="hover:opacity-70">×</button>
+              </span>
+            )}
             <span className="text-[--color-text-muted] ml-1">
               — {nRows} rows, {nCols} cols shown
             </span>
@@ -1304,6 +1452,23 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
           </>
         )}
       </div>
+
+      {/* ── Filter panel ── */}
+      {filterPanelOpen && (
+        <FilterPanel
+          seriesNames={dataset.seriesNames}
+          rowValueFilters={rowValueFilters}
+          colValueFilters={colValueFilters}
+          rowIdFilter={rowIdFilter}
+          colIdFilter={colIdFilter}
+          onRowValueFiltersChange={handleRowValueFiltersChange}
+          onColValueFiltersChange={handleColValueFiltersChange}
+          onRowIdFilterChange={handleRowIdFilterChange}
+          onColIdFilterChange={handleColIdFilterChange}
+          onClose={() => setFilterPanelOpen(false)}
+          isDark={darkMode}
+        />
+      )}
 
       {/* ── Tooltip ── */}
       {tooltip && (
