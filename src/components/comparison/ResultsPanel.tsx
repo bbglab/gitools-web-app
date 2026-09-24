@@ -10,10 +10,11 @@ interface Props {
   hasPValue: boolean
   onGeneClick: (rowIndex: number) => void
   onAddAnnotations: (results: RowResult[]) => void
+  isDark: boolean
 }
 
-const ROW_H    = 22
-const TABLE_H  = 280
+const ROW_H   = 22
+const TABLE_H = 280
 
 function fmt(v: number): string {
   if (isNaN(v) || !isFinite(v)) return '—'
@@ -21,7 +22,7 @@ function fmt(v: number): string {
   return v.toFixed(3)
 }
 
-export function ResultsPanel({ results, hasPValue, onGeneClick, onAddAnnotations }: Props) {
+export function ResultsPanel({ results, hasPValue, onGeneClick, onAddAnnotations, isDark }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [scrollTop, setScrollTop] = useState(0)
@@ -67,19 +68,35 @@ export function ResultsPanel({ results, hasPValue, onGeneClick, onAddAnnotations
     URL.revokeObjectURL(a.href)
   }
 
+  const panelBg  = isDark ? '#0d0d1a' : '#ffffff'
+  const headerBg = isDark ? '#10101e' : '#f5f5f5'
+  const headerBorder = isDark ? '#2a2a45' : '#e5e7eb'
+  const rowEven  = isDark ? '#0a0a12' : '#ffffff'
+  const rowOdd   = isDark ? '#0d0d1a' : '#f9fafb'
+  const rowHover = isDark ? '#1a1a3a' : '#eff6ff'
+  const mutedTxt = isDark ? '#9ca3af' : '#6b7280'
+  const sigGene  = isDark ? '#a5b4fc' : '#1d4ed8'
+  const normGene = isDark ? '#9ca3af' : '#374151'
+  const posScore = isDark ? '#60a5fa' : '#1d4ed8'
+  const negScore = isDark ? '#f87171' : '#dc2626'
+  const sigFdr   = isDark ? '#a5b4fc' : '#1d4ed8'
+  const dimFdr   = isDark ? '#6b7280' : '#9ca3af'
+
   const thStyle: React.CSSProperties = {
     position: 'sticky', top: 0, zIndex: 1,
-    background: '#10101e', padding: '2px 4px',
-    borderBottom: '1px solid #2a2a45',
+    background: headerBg,
+    padding: '2px 4px',
+    borderBottom: `1px solid ${headerBorder}`,
     textAlign: 'right', whiteSpace: 'nowrap',
     cursor: 'pointer', userSelect: 'none',
+    color: mutedTxt,
   }
 
   return (
-    <div className="flex flex-col" style={{ background: '#0d0d1a' }}>
+    <div className="flex flex-col" style={{ background: panelBg }}>
       {/* Volcano / score plot */}
       <div className="flex justify-center border-b border-[--color-border] pt-2">
-        <VolcanoPlot results={sorted} hasPValue={hasPValue} onGeneClick={onGeneClick} />
+        <VolcanoPlot results={sorted} hasPValue={hasPValue} onGeneClick={onGeneClick} isDark={isDark} />
       </div>
 
       {/* Action buttons */}
@@ -92,7 +109,7 @@ export function ResultsPanel({ results, hasPValue, onGeneClick, onAddAnnotations
           className="text-[10px] px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text]">
           Add to annotations
         </button>
-        <span className="ml-auto text-[10px] text-[--color-text-muted] self-center">
+        <span className="ml-auto text-[10px] self-center" style={{ color: mutedTxt }}>
           {results.length} genes
           {hasPValue && ` · ${results.filter(r => r.fdr <= 0.05).length} FDR ≤ 0.05`}
         </span>
@@ -107,7 +124,7 @@ export function ResultsPanel({ results, hasPValue, onGeneClick, onAddAnnotations
         <table className="w-full border-collapse" style={{ fontSize: 10, fontFamily: 'monospace' }}>
           <thead>
             <tr>
-              <th style={{ ...thStyle, textAlign: 'left', width: 110 }}>Gene</th>
+              <th style={{ ...thStyle, textAlign: 'left', width: 110 }} onClick={() => toggleSort('score')}>Gene</th>
               <th style={thStyle} onClick={() => toggleSort('score')}>Score{arrow('score')}</th>
               {hasPValue && <>
                 <th style={thStyle} onClick={() => toggleSort('pvalue')}>p-value{arrow('pvalue')}</th>
@@ -118,7 +135,6 @@ export function ResultsPanel({ results, hasPValue, onGeneClick, onAddAnnotations
             </tr>
           </thead>
           <tbody>
-            {/* Spacer for rows above visible window */}
             {visStart > 0 && (
               <tr><td colSpan={hasPValue ? 6 : 4} style={{ height: visStart * ROW_H, padding: 0 }} /></tr>
             )}
@@ -131,26 +147,26 @@ export function ResultsPanel({ results, hasPValue, onGeneClick, onAddAnnotations
                   style={{
                     height: ROW_H,
                     cursor: 'pointer',
-                    background: (visStart + i) % 2 === 0 ? '#0a0a12' : '#0d0d1a',
+                    background: (visStart + i) % 2 === 0 ? rowEven : rowOdd,
                   }}
-                  className="hover:bg-[#1a1a3a]"
+                  onMouseEnter={e => (e.currentTarget.style.background = rowHover)}
+                  onMouseLeave={e => (e.currentTarget.style.background = (visStart + i) % 2 === 0 ? rowEven : rowOdd)}
                 >
                   <td style={{ padding: '1px 4px', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    <span style={{ color: sig ? '#a5b4fc' : '#9ca3af' }} title={r.name}>{r.name}</span>
+                    <span style={{ color: sig ? sigGene : normGene }} title={r.name}>{r.name}</span>
                   </td>
-                  <td style={{ textAlign: 'right', padding: '1px 4px', color: r.score > 0 ? '#60a5fa' : r.score < 0 ? '#f87171' : '#9ca3af' }}>
+                  <td style={{ textAlign: 'right', padding: '1px 4px', color: r.score > 0 ? posScore : r.score < 0 ? negScore : mutedTxt }}>
                     {fmt(r.score)}
                   </td>
                   {hasPValue && <>
-                    <td style={{ textAlign: 'right', padding: '1px 4px', color: '#9ca3af' }}>{fmt(r.pvalue)}</td>
-                    <td style={{ textAlign: 'right', padding: '1px 4px', color: sig ? '#a5b4fc' : '#6b7280' }}>{fmt(r.fdr)}</td>
+                    <td style={{ textAlign: 'right', padding: '1px 4px', color: mutedTxt }}>{fmt(r.pvalue)}</td>
+                    <td style={{ textAlign: 'right', padding: '1px 4px', color: sig ? sigFdr : dimFdr }}>{fmt(r.fdr)}</td>
                   </>}
-                  <td style={{ textAlign: 'right', padding: '1px 4px', color: '#9ca3af' }}>{fmt(r.meanA)}</td>
-                  <td style={{ textAlign: 'right', padding: '1px 4px', color: '#9ca3af' }}>{fmt(r.meanB)}</td>
+                  <td style={{ textAlign: 'right', padding: '1px 4px', color: mutedTxt }}>{fmt(r.meanA)}</td>
+                  <td style={{ textAlign: 'right', padding: '1px 4px', color: mutedTxt }}>{fmt(r.meanB)}</td>
                 </tr>
               )
             })}
-            {/* Spacer for rows below visible window */}
             {visEnd < sorted.length && (
               <tr><td colSpan={hasPValue ? 6 : 4} style={{ height: (sorted.length - visEnd) * ROW_H, padding: 0 }} /></tr>
             )}

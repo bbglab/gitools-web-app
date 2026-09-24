@@ -36,6 +36,81 @@ interface Tooltip {
   values: number[]
 }
 
+interface Theme {
+  bg: string
+  surface: string
+  surface2: string
+  textMuted: string
+  filterColor: string
+  clearColor: [number, number, number, number]
+  labelColor: string
+  labelHighlight: string
+  highlightBg: string
+  highlightGlow: string
+  seriesActive: { background: string; color: string; borderColor: string }
+  seriesIdle:   { background: string; color: string; borderColor: string }
+  cmpActive:    { background: string; color: string; borderColor: string }
+  cmpIdle:      { background: string; color: string; borderColor: string }
+  tooltipBg: string
+  tooltipBorder: string
+  tooltipValue: string
+  tooltipMuted: string
+  checkActive: string
+  checkBorder: string
+  valueActive: string
+  valueInactive: string
+}
+
+const DARK_THEME: Theme = {
+  bg:            '#0a0a12',
+  surface:       '#10101e',
+  surface2:      '#0f0f22',
+  textMuted:     '#6b7280',
+  filterColor:   '#fb923c',
+  clearColor:    [0.06, 0.06, 0.10, 1],
+  labelColor:    '#6b7280',
+  labelHighlight:'#fbbf24',
+  highlightBg:   'rgba(251,191,36,0.12)',
+  highlightGlow: '0 0 10px 2px rgba(251,191,36,0.35)',
+  seriesActive:  { background: '#2a2a6e', color: '#a0a8ff', borderColor: '#4040a0' },
+  seriesIdle:    { background: 'transparent', color: '#6b7280', borderColor: '#2a2a45' },
+  cmpActive:     { background: '#1e1e4a', color: '#a0a8ff', borderColor: '#4040a0' },
+  cmpIdle:       { background: 'transparent', color: '#6b7280', borderColor: '#2a2a45' },
+  tooltipBg:     'rgba(10,10,20,0.96)',
+  tooltipBorder: '#2a2a45',
+  tooltipValue:  '#e2e8f0',
+  tooltipMuted:  '#6b7280',
+  checkActive:   '#4f8ef7',
+  checkBorder:   '#4040a0',
+  valueActive:   '#9ca3af',
+  valueInactive: '#4b5563',
+}
+
+const LIGHT_THEME: Theme = {
+  bg:            '#ffffff',
+  surface:       '#f5f5f5',
+  surface2:      '#efefef',
+  textMuted:     '#6b7280',
+  filterColor:   '#d97706',
+  clearColor:    [1, 1, 1, 1],
+  labelColor:    '#9ca3af',
+  labelHighlight:'#b45309',
+  highlightBg:   'rgba(180,83,9,0.08)',
+  highlightGlow: '0 0 10px 2px rgba(180,83,9,0.20)',
+  seriesActive:  { background: '#dbeafe', color: '#1d4ed8', borderColor: '#93c5fd' },
+  seriesIdle:    { background: 'transparent', color: '#6b7280', borderColor: '#e0e0e0' },
+  cmpActive:     { background: '#eff6ff', color: '#1d4ed8', borderColor: '#93c5fd' },
+  cmpIdle:       { background: 'transparent', color: '#6b7280', borderColor: '#e0e0e0' },
+  tooltipBg:     'rgba(255,255,255,0.97)',
+  tooltipBorder: '#e0e0e0',
+  tooltipValue:  '#1a1a1a',
+  tooltipMuted:  '#6b6b6b',
+  checkActive:   '#2563eb',
+  checkBorder:   '#93c5fd',
+  valueActive:   '#374151',
+  valueInactive: '#9ca3af',
+}
+
 const GROUP_COLORS = new Map([['A', '#3b82f6'], ['B', '#ef4444']])
 
 function identity(n: number): number[] {
@@ -67,6 +142,9 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
   const dataTexRef = useRef<DataTextureResult | null>(null)
   const cmapTexRef = useRef<WebGLTexture | null>(null)
   const rafRef     = useRef(0)
+
+  const [darkMode, setDarkMode] = useState(false)
+  const theme = darkMode ? DARK_THEME : LIGHT_THEME
 
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 })
   const [viewState, setViewState]   = useState<ViewState>({
@@ -169,6 +247,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
 
   const vsRef = useRef(viewState)
   useEffect(() => { vsRef.current = viewState }, [viewState])
+
 
   // Auto-select annotation field when compare panel opens
   useEffect(() => {
@@ -273,7 +352,8 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
       const pw  = Math.round(canvasSize.w * dpr)
       const ph  = Math.round(canvasSize.h * dpr)
       gl.viewport(0, 0, pw, ph)
-      gl.clearColor(0.06, 0.06, 0.10, 1)
+      if (darkMode) gl.clearColor(0.06, 0.06, 0.10, 1)
+      else          gl.clearColor(1, 1, 1, 1)
       gl.clear(gl.COLOR_BUFFER_BIT)
       gl.useProgram(prog)
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, dTex)
@@ -290,11 +370,16 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
       gl.uniform2f(gl.getUniformLocation(prog, 'u_offset'),     vs.colOffset, vs.rowOffset)
       gl.uniform1f(gl.getUniformLocation(prog, 'u_vmin'),       colorRange[0])
       gl.uniform1f(gl.getUniformLocation(prog, 'u_vmax'),       colorRange[1])
+      const [br, bg, bb, ba] = theme.clearColor
+      gl.uniform4f(gl.getUniformLocation(prog, 'u_bgColor'),    br, bg, bb, ba)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     })
-  }, [canvasSize, viewState, colorRange, dataset, displayRowOrder, displayColOrder])
+  }, [canvasSize, viewState, colorRange, dataset, displayRowOrder, displayColOrder, darkMode])
 
   // ── Sort (operates on full order, filter is applied on top) ──────────────────
+  const [lastColSort, setLastColSort] = useState<{ dc: number; dir: 'asc' | 'desc' } | null>(null)
+  const [lastRowSort, setLastRowSort] = useState<{ dr: number; dir: 'asc' | 'desc' } | null>(null)
+
   const sortBy = useCallback((axis: 'row' | 'col', fieldName: string, dir: 'asc' | 'desc') => {
     const meta = axis === 'row' ? dataset.rowMetadata : dataset.colMetadata
     const vec  = meta.getVector(fieldName)
@@ -304,9 +389,47 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
     } else {
       setColOrder(sortOrder(vec, fullColOrderRef.current, dir))
     }
+    setLastColSort(null)
+    setLastRowSort(null)
     setTexVersion(v => v + 1)
     setViewState(vs => ({ ...vs, rowOffset: 0, colOffset: 0 }))
   }, [dataset])
+
+  // Sort rows by values in a specific column (clicking a column label)
+  const sortRowsByCol = useCallback((dc: number) => {
+    const dir = (lastColSort?.dc === dc && lastColSort.dir === 'desc') ? 'asc' : 'desc'
+    const sorted = [...fullRowOrderRef.current].sort((a, b) => {
+      const va = dataset.getValue(a, dc, activeSeries)
+      const vb = dataset.getValue(b, dc, activeSeries)
+      if (isNaN(va) && isNaN(vb)) return 0
+      if (isNaN(va)) return 1
+      if (isNaN(vb)) return -1
+      return dir === 'desc' ? vb - va : va - vb
+    })
+    setRowOrder(sorted)
+    setLastColSort({ dc, dir })
+    setLastRowSort(null)
+    setTexVersion(v => v + 1)
+    setViewState(vs => ({ ...vs, rowOffset: 0 }))
+  }, [dataset, activeSeries, lastColSort])
+
+  // Sort columns by values in a specific row (clicking a gene label)
+  const sortColsByRow = useCallback((dr: number) => {
+    const dir = (lastRowSort?.dr === dr && lastRowSort.dir === 'desc') ? 'asc' : 'desc'
+    const sorted = [...fullColOrderRef.current].sort((a, b) => {
+      const va = dataset.getValue(dr, a, activeSeries)
+      const vb = dataset.getValue(dr, b, activeSeries)
+      if (isNaN(va) && isNaN(vb)) return 0
+      if (isNaN(va)) return 1
+      if (isNaN(vb)) return -1
+      return dir === 'desc' ? vb - va : va - vb
+    })
+    setColOrder(sorted)
+    setLastRowSort({ dr, dir })
+    setLastColSort(null)
+    setTexVersion(v => v + 1)
+    setViewState(vs => ({ ...vs, colOffset: 0 }))
+  }, [dataset, activeSeries, lastRowSort])
 
   // ── Filter helpers ────────────────────────────────────────────────────────────
   const quickFilterCol = useCallback((fieldName: string, value: string) => {
@@ -624,17 +747,21 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
   const hasPValue  = TEST_OPTIONS.find(t => t.value === compareTest)?.hasPValue ?? true
   const anyFilters = rowFilters.size > 0 || colFilters.size > 0
 
+  const searchBorderColor = search.trim()
+    ? (highlightedRows.size > 0 ? '#f59e0b' : '#ef4444')
+    : (darkMode ? '#2a2a45' : '#e0e0e0')
+
   if (glError) return (
     <div className="flex items-center justify-center h-full text-red-400 text-sm font-mono p-8">{glError}</div>
   )
 
   return (
-    <div className="flex h-full" style={{ background: '#0a0a12' }}>
+    <div className="flex h-full" style={{ background: theme.bg }}>
 
       {/* ── Left sidebar ── */}
       <div
         className="shrink-0 flex flex-col border-r border-[--color-border] transition-all"
-        style={{ width: sidebarOpen ? 220 : 0, overflow: 'hidden', background: '#10101e' }}
+        style={{ width: sidebarOpen ? 220 : 0, overflow: 'hidden', background: theme.surface }}
       >
         {sidebarOpen && (
           <div className="p-2 overflow-y-auto flex-1 text-xs font-mono">
@@ -643,24 +770,30 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
               vecs={colAnnotVecs}
               visible={visColTracks}
               onToggle={n => setVisColTracks(s => { const c = new Set(s); c.has(n) ? c.delete(n) : c.add(n); return c })}
+              onSelectAll={() => setVisColTracks(new Set(colAnnotVecs.map(v => v.name)))}
+              onDeselectAll={() => setVisColTracks(new Set())}
               onSort={(n, d) => sortBy('col', n, d)}
               onDrop={e => onAnnotDrop(e, 'col')}
               loading={annotLoading}
               filters={colFilters}
               onToggleValue={toggleColValue}
               onClearFilter={clearColFilter}
+              theme={theme}
             />
             <SidebarSection
               title="Row annotations"
               vecs={rowAnnotVecs}
               visible={visRowTracks}
               onToggle={n => setVisRowTracks(s => { const c = new Set(s); c.has(n) ? c.delete(n) : c.add(n); return c })}
+              onSelectAll={() => setVisRowTracks(new Set(rowAnnotVecs.map(v => v.name)))}
+              onDeselectAll={() => setVisRowTracks(new Set())}
               onSort={(n, d) => sortBy('row', n, d)}
               onDrop={e => onAnnotDrop(e, 'row')}
               loading={annotLoading}
               filters={rowFilters}
               onToggleValue={toggleRowValue}
               onClearFilter={clearRowFilter}
+              theme={theme}
             />
           </div>
         )}
@@ -671,7 +804,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
 
         {/* ── Top controls bar ── */}
         <div className="flex items-center gap-2 px-2 py-1 shrink-0 border-b border-[--color-border]"
-          style={{ background: '#10101e' }}>
+          style={{ background: theme.surface }}>
           <button
             onClick={() => setSidebarOpen(o => !o)}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text]"
@@ -681,17 +814,16 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           {seriesCount > 1 && (
             <div className="flex items-center gap-1">
               <span className="text-xs text-[--color-text-muted]">Series:</span>
-              {dataset.seriesNames.map((name, i) => (
-                <button key={i} onClick={() => setActiveSeries(i)}
-                  className="px-2 py-0.5 rounded text-xs font-mono transition-colors"
-                  style={{
-                    background: i === activeSeries ? '#2a2a6e' : 'transparent',
-                    color:      i === activeSeries ? '#a0a8ff' : '#6b7280',
-                    border:     `1px solid ${i === activeSeries ? '#4040a0' : '#2a2a45'}`,
-                  }}>
-                  {name}
-                </button>
-              ))}
+              {dataset.seriesNames.map((name, i) => {
+                const s = i === activeSeries ? theme.seriesActive : theme.seriesIdle
+                return (
+                  <button key={i} onClick={() => setActiveSeries(i)}
+                    className="px-2 py-0.5 rounded text-xs font-mono transition-colors"
+                    style={{ background: s.background, color: s.color, border: `1px solid ${s.borderColor}` }}>
+                    {name}
+                  </button>
+                )
+              })}
             </div>
           )}
           <div className="flex-1" />
@@ -701,50 +833,50 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
             value={search}
             onChange={e => handleSearch(e.target.value)}
             className="px-2 py-0.5 rounded text-xs font-mono bg-[--color-bg] text-[--color-text] outline-none w-36"
-            style={{
-              border: search.trim()
-                ? highlightedRows.size > 0 ? '1px solid #f59e0b' : '1px solid #ef4444'
-                : '1px solid var(--color-border)',
-            }}
+            style={{ border: `1px solid ${searchBorderColor}` }}
           />
           <button
             onClick={() => setCompareOpen(o => !o)}
             className="text-xs px-2 py-0.5 rounded border transition-colors"
-            style={{
-              background:  compareOpen ? '#1e1e4a' : 'transparent',
-              color:       compareOpen ? '#a0a8ff' : '#6b7280',
-              borderColor: compareOpen ? '#4040a0' : '#2a2a45',
-            }}
+            style={compareOpen
+              ? { background: theme.cmpActive.background, color: theme.cmpActive.color, borderColor: theme.cmpActive.borderColor }
+              : { background: theme.cmpIdle.background,   color: theme.cmpIdle.color,   borderColor: theme.cmpIdle.borderColor }}
           >
             ⚖ Compare Groups
+          </button>
+          <button
+            onClick={() => setDarkMode(d => !d)}
+            className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
+            title="Toggle light/dark background"
+          >
+            {darkMode ? 'Light' : 'Dark'}
           </button>
         </div>
 
         {/* ── Active filter status bar ── */}
         {anyFilters && (
-          <div className="flex items-center gap-2 px-3 py-0.5 shrink-0 text-[10px] font-mono"
-            style={{ background: '#0f0f22', borderBottom: '1px solid #2a2a45' }}>
-            <span style={{ color: '#fb923c' }}>Filters active:</span>
+          <div className="flex items-center gap-2 px-3 py-0.5 shrink-0 text-[10px] font-mono border-b border-[--color-border]"
+            style={{ background: theme.surface2 }}>
+            <span style={{ color: theme.filterColor }}>Filters active:</span>
             {[...colFilters.entries()].map(([field, vals]) => (
               <span key={`c:${field}`} className="flex items-center gap-1"
-                style={{ color: '#fb923c' }}>
+                style={{ color: theme.filterColor }}>
                 {field} ({vals.size})
-                <button onClick={() => clearColFilter(field)} className="hover:text-white">×</button>
+                <button onClick={() => clearColFilter(field)} className="hover:opacity-70">×</button>
               </span>
             ))}
             {[...rowFilters.entries()].map(([field, vals]) => (
               <span key={`r:${field}`} className="flex items-center gap-1"
-                style={{ color: '#fb923c' }}>
+                style={{ color: theme.filterColor }}>
                 {field} ({vals.size})
-                <button onClick={() => clearRowFilter(field)} className="hover:text-white">×</button>
+                <button onClick={() => clearRowFilter(field)} className="hover:opacity-70">×</button>
               </span>
             ))}
             <span className="text-[--color-text-muted] ml-1">
               — {nRows} rows, {nCols} cols shown
             </span>
             <button onClick={clearAllFilters}
-              className="ml-auto underline"
-              style={{ color: '#6b7280' }}>
+              className="ml-auto underline text-[--color-text-muted]">
               Clear all
             </button>
           </div>
@@ -763,7 +895,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
                 colors={GROUP_COLORS}
               />
               <div className="absolute left-1 top-0 text-[9px] pointer-events-none"
-                style={{ color: '#6b7280', lineHeight: '12px' }}>groups</div>
+                style={{ color: theme.textMuted, lineHeight: '12px' }}>groups</div>
             </div>
           </div>
         )}
@@ -796,7 +928,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
                     colors={catColorMaps.get(vec.name)}
                   />
                   <div className="absolute left-1 top-0 text-[9px] leading-tight truncate pointer-events-none"
-                    style={{ maxWidth: 80, color: hasFilter ? '#fb923c' : '#6b7280' }}>
+                    style={{ maxWidth: 80, color: hasFilter ? theme.filterColor : theme.textMuted }}>
                     {vec.name}{hasFilter ? ' ▼' : ''}
                   </div>
                 </div>
@@ -810,14 +942,26 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
           <div style={{ width: ROW_LABEL_W + rowAnnotWidth, minWidth: ROW_LABEL_W + rowAnnotWidth }} />
           <div className="relative flex-1 overflow-hidden border-b border-[--color-border]">
             {Array.from({ length: endCol - startCol }, (_, i) => {
-              const vc    = startCol + i
-              const dc    = displayColOrder[vc]
-              const cx    = (vc - vs.colOffset) * vs.cellW + vs.cellW / 2
-              const label = (colIdVec?.values[dc] as string | null) ?? `S${dc}`
+              const vc      = startCol + i
+              const dc      = displayColOrder[vc]
+              const cx      = (vc - vs.colOffset) * vs.cellW + vs.cellW / 2
+              const label   = (colIdVec?.values[dc] as string | null) ?? `S${dc}`
+              const isActive = lastColSort?.dc === dc
+              const arrow   = isActive ? (lastColSort.dir === 'desc' ? ' ▼' : ' ▲') : ''
               return (
-                <div key={vc} className="absolute text-xs font-mono text-[--color-text-muted]"
-                  style={{ left: cx, bottom: 6, transform: 'rotate(-55deg)', transformOrigin: 'left bottom', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden' }}>
-                  {label}
+                <div key={vc}
+                  className="absolute text-xs font-mono cursor-pointer select-none hover:opacity-80"
+                  style={{
+                    left: cx, bottom: 6,
+                    transform: 'rotate(-55deg)', transformOrigin: 'left bottom',
+                    whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden',
+                    color: isActive ? theme.labelHighlight : theme.textMuted,
+                    fontWeight: isActive ? 'bold' : 'normal',
+                  }}
+                  onClick={() => sortRowsByCol(dc)}
+                  title={`Sort genes by ${label}`}
+                >
+                  {label}{arrow}
                 </div>
               )
             })}
@@ -829,22 +973,28 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
 
           {/* Row label strip */}
           <div className="relative shrink-0 overflow-hidden border-r border-[--color-border]"
-            style={{ width: ROW_LABEL_W, background: '#0a0a12' }}>
+            style={{ width: ROW_LABEL_W, background: theme.bg }}>
             {showRowLbl && Array.from({ length: endRow - startRow }, (_, i) => {
-              const vr    = startRow + i
-              const dr    = displayRowOrder[vr]
-              const cy    = (vr - vs.rowOffset) * vs.cellH + vs.cellH / 2
-              const label = (rowIdVec?.values[dr] as string | null) ?? `R${dr}`
-              const isMatch = highlightedRows.has(dr)
+              const vr      = startRow + i
+              const dr      = displayRowOrder[vr]
+              const cy      = (vr - vs.rowOffset) * vs.cellH + vs.cellH / 2
+              const label   = (rowIdVec?.values[dr] as string | null) ?? `R${dr}`
+              const isMatch  = highlightedRows.has(dr)
+              const isActive = lastRowSort?.dr === dr
+              const arrow    = isActive ? (lastRowSort.dir === 'desc' ? '▼ ' : '▲ ') : ''
               return (
-                <div key={vr} className="absolute right-2 font-mono truncate"
+                <div key={vr}
+                  className="absolute right-2 font-mono truncate cursor-pointer select-none hover:opacity-80"
                   style={{
                     top: cy, maxWidth: ROW_LABEL_W - 10, transform: 'translateY(-50%)',
                     lineHeight: 1, fontSize: Math.min(12, vs.cellH * 0.75),
-                    color:      isMatch ? '#fbbf24' : '#6b7280',
-                    fontWeight: isMatch ? 'bold'   : 'normal',
-                  }}>
-                  {label}
+                    color:      isMatch || isActive ? theme.labelHighlight : theme.labelColor,
+                    fontWeight: isMatch || isActive ? 'bold' : 'normal',
+                  }}
+                  onClick={() => sortColsByRow(dr)}
+                  title={`Sort samples by ${label}`}
+                >
+                  {arrow}{label}
                 </div>
               )
             })}
@@ -877,7 +1027,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
                 />
                 {hasFilter && (
                   <div className="absolute top-1 left-0 right-0 text-center text-[8px] pointer-events-none"
-                    style={{ color: '#fb923c' }}>▼</div>
+                    style={{ color: theme.filterColor }}>▼</div>
                 )}
               </div>
             )
@@ -903,9 +1053,9 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
                 <div key={vr} className="absolute left-0 right-0 pointer-events-none"
                   style={{
                     top: y, height: h,
-                    outline: '2px solid #fbbf24', outlineOffset: '-1px',
-                    background: 'rgba(251,191,36,0.12)',
-                    boxShadow: '0 0 10px 2px rgba(251,191,36,0.35)',
+                    outline: `2px solid ${theme.labelHighlight}`, outlineOffset: '-1px',
+                    background: theme.highlightBg,
+                    boxShadow: theme.highlightGlow,
                     zIndex: 10,
                   }}
                 />
@@ -915,11 +1065,11 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
         </div>
 
         {/* ── Color legend ── */}
-        <ColorLegend vmin={colorRange[0]} vmax={colorRange[1]} />
+        <ColorLegend vmin={colorRange[0]} vmax={colorRange[1]} surface={theme.surface} />
 
         {/* ── Errors ── */}
         {annotError && (
-          <div className="px-3 py-1 text-xs text-red-300 bg-red-950 border-t border-red-800 flex justify-between">
+          <div className="px-3 py-1 text-xs text-red-700 bg-red-50 border-t border-red-200 flex justify-between">
             <span>{annotError}</span>
             <button onClick={() => setAnnotError(null)} className="underline ml-2">dismiss</button>
           </div>
@@ -932,7 +1082,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
         style={{
           width: compareOpen ? PANEL_W : 0,
           minWidth: compareOpen ? PANEL_W : 0,
-          background: '#0d0d1a',
+          background: theme.surface,
           overflow: compareOpen ? 'auto' : 'hidden',
         }}
       >
@@ -954,6 +1104,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
               progress={compareProgress}
               onRun={runComparison}
               onClose={() => setCompareOpen(false)}
+              isDark={darkMode}
             />
             {compareResults && (
               <div className="border-t border-[--color-border]">
@@ -962,6 +1113,7 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
                   hasPValue={hasPValue}
                   onGeneClick={onGeneClick}
                   onAddAnnotations={onAddAnnotations}
+                  isDark={darkMode}
                 />
               </div>
             )}
@@ -972,13 +1124,15 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
       {/* ── Tooltip ── */}
       {tooltip && (
         <div className="fixed z-50 pointer-events-none rounded px-2 py-1.5 text-xs font-mono shadow-xl"
-          style={{ left: tooltip.clientX + 14, top: tooltip.clientY - 8,
-            background: 'rgba(10,10,20,0.96)', border: '1px solid #2a2a45', maxWidth: 260 }}>
+          style={{
+            left: tooltip.clientX + 14, top: tooltip.clientY - 8,
+            background: theme.tooltipBg, border: `1px solid ${theme.tooltipBorder}`, maxWidth: 260,
+          }}>
           <div className="font-semibold text-[--color-accent] truncate">{tooltip.gene}</div>
-          <div className="text-[--color-text-muted] truncate mb-1">{tooltip.sample}</div>
+          <div className="truncate mb-1" style={{ color: theme.tooltipMuted }}>{tooltip.sample}</div>
           {dataset.seriesNames.map((name, i) => (
             <div key={i} className="flex justify-between gap-3 tabular-nums text-xs"
-              style={{ color: i === activeSeries ? '#e2e8f0' : '#6b7280' }}>
+              style={{ color: i === activeSeries ? theme.tooltipValue : theme.tooltipMuted }}>
               <span>{name}</span>
               <span>{isNaN(tooltip.values[i]) ? '—' : tooltip.values[i].toFixed(4)}</span>
             </div>
@@ -992,19 +1146,22 @@ export function HeatmapViewer({ dataset }: { dataset: Dataset }) {
 // ── Sidebar section ───────────────────────────────────────────────────────────
 
 function SidebarSection({
-  title, vecs, visible, onToggle, onSort, onDrop, loading,
-  filters, onToggleValue, onClearFilter,
+  title, vecs, visible, onToggle, onSelectAll, onDeselectAll, onSort, onDrop, loading,
+  filters, onToggleValue, onClearFilter, theme,
 }: {
   title: string
   vecs: Vector[]
   visible: Set<string>
   onToggle: (name: string) => void
+  onSelectAll: () => void
+  onDeselectAll: () => void
   onSort: (name: string, dir: 'asc' | 'desc') => void
   onDrop: (e: DragEvent<HTMLDivElement>) => void
   loading: boolean
   filters: Map<string, Set<string>>
   onToggleValue: (field: string, value: string) => void
   onClearFilter: (field: string) => void
+  theme: Theme
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
@@ -1013,7 +1170,18 @@ function SidebarSection({
 
   return (
     <div className="mb-3">
-      <div className="text-[--color-text-muted] uppercase tracking-wide text-[10px] mb-1">{title}</div>
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-[--color-text-muted] uppercase tracking-wide text-[10px]">{title}</div>
+        {vecs.length > 5 && (
+          <div className="flex gap-2">
+            <button onClick={onSelectAll}
+              className="text-[9px] underline hover:opacity-70"
+              style={{ color: theme.checkActive }}>all</button>
+            <button onClick={onDeselectAll}
+              className="text-[9px] underline hover:opacity-70 text-[--color-text-muted]">none</button>
+          </div>
+        )}
+      </div>
 
       {vecs.length === 0 && (
         <div
@@ -1039,7 +1207,10 @@ function SidebarSection({
               <button
                 onClick={() => onToggle(vec.name)}
                 className="w-3 h-3 rounded-sm border flex-shrink-0"
-                style={{ background: visible.has(vec.name) ? '#4f8ef7' : 'transparent', borderColor: '#4040a0' }}
+                style={{
+                  background:  visible.has(vec.name) ? theme.checkActive : 'transparent',
+                  borderColor: theme.checkBorder,
+                }}
               />
               {/* expand toggle for filter values (string fields only) */}
               {isString ? (
@@ -1056,7 +1227,7 @@ function SidebarSection({
                 {vec.name}
               </span>
               {hasFilter && (
-                <span className="text-[10px]" style={{ color: '#fb923c' }}>●</span>
+                <span className="text-[10px]" style={{ color: theme.filterColor }}>●</span>
               )}
               <button onClick={() => onSort(vec.name, 'asc')}
                 className="text-[--color-text-muted] hover:text-[--color-text] px-0.5">↑</button>
@@ -1064,8 +1235,8 @@ function SidebarSection({
                 className="text-[--color-text-muted] hover:text-[--color-text] px-0.5">↓</button>
               {hasFilter && (
                 <button onClick={() => onClearFilter(vec.name)}
-                  className="hover:text-white text-[10px]"
-                  style={{ color: '#fb923c' }}
+                  className="hover:opacity-70 text-[10px]"
+                  style={{ color: theme.filterColor }}
                   title="Clear filter">×</button>
               )}
             </div>
@@ -1088,13 +1259,13 @@ function SidebarSection({
                           onClick={() => onToggleValue(vec.name, val)}
                           className="w-3 h-3 rounded-sm border flex-shrink-0"
                           style={{
-                            background:  included ? '#4f8ef7' : 'transparent',
-                            borderColor: '#4040a0',
+                            background:  included ? theme.checkActive : 'transparent',
+                            borderColor: theme.checkBorder,
                           }}
                         />
                         <span
                           className="truncate text-[10px] cursor-pointer"
-                          style={{ color: included ? '#9ca3af' : '#4b5563' }}
+                          style={{ color: included ? theme.valueActive : theme.valueInactive }}
                           onClick={() => onToggleValue(vec.name, val)}
                           title={val}
                         >{val}</span>
@@ -1123,10 +1294,10 @@ function SidebarSection({
 
 // ── Color legend ──────────────────────────────────────────────────────────────
 
-function ColorLegend({ vmin, vmax }: { vmin: number; vmax: number }) {
+function ColorLegend({ vmin, vmax, surface }: { vmin: number; vmax: number; surface: string }) {
   return (
     <div className="flex items-center gap-3 px-4 py-1.5 shrink-0 border-t border-[--color-border]"
-      style={{ background: '#10101e' }}>
+      style={{ background: surface }}>
       <span className="text-xs font-mono text-[--color-text-muted] tabular-nums w-12 text-right">{vmin.toFixed(2)}</span>
       <div className="h-2.5 rounded flex-1 max-w-40"
         style={{ background: 'linear-gradient(to right, rgb(33,102,172), rgb(247,247,247), rgb(214,96,77))' }} />

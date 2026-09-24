@@ -100,8 +100,8 @@ export function DropZone({ onDatasetLoaded }: DropZoneProps) {
             'border-2 border-dashed rounded-xl p-12 cursor-pointer',
             'transition-all duration-150',
             dragging
-              ? 'border-[--color-accent] bg-[#4f8ef710]'
-              : 'border-[--color-border] hover:border-[#4444aa] bg-[--color-surface]',
+              ? 'border-[--color-accent] bg-[#2563eb10]'
+              : 'border-[--color-border] hover:border-[--color-accent] bg-[--color-surface]',
             loadState === 'loading' ? 'pointer-events-none opacity-80' : '',
           ].join(' ')}
         >
@@ -133,7 +133,7 @@ export function DropZone({ onDatasetLoaded }: DropZoneProps) {
 
         {/* Error */}
         {loadState === 'error' && (
-          <div className="mt-4 p-3 rounded-lg bg-red-950 border border-red-800 text-red-300 text-sm">
+          <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
             <strong>Error:</strong> {errorMsg}
             <button
               onClick={() => { setLoadState('idle'); setErrorMsg('') }}

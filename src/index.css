@@ -4,12 +4,12 @@
 
 @layer base {
   :root {
-    --color-bg: #0f0f1a;
-    --color-surface: #1a1a2e;
-    --color-border: #2a2a45;
-    --color-text: #e8e8f0;
-    --color-text-muted: #8888aa;
-    --color-accent: #4f8ef7;
+    --color-bg: #ffffff;
+    --color-surface: #f5f5f5;
+    --color-border: #e0e0e0;
+    --color-text: #1a1a1a;
+    --color-text-muted: #6b6b6b;
+    --color-accent: #2563eb;
   }
 
   html, body, #root {
@@ -35,5 +35,5 @@
     background: var(--color-border);
     border-radius: 3px;
   }
-  ::-webkit-scrollbar-thumb:hover { background: #3a3a60; }
+  ::-webkit-scrollbar-thumb:hover { background: #c0c0c0; }
 }

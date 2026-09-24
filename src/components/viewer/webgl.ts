@@ -26,6 +26,7 @@ uniform vec2  u_cellSize;      // physical pixels per cell
 uniform vec2  u_offset;        // (colOffset, rowOffset) in data units
 uniform float u_vmin;
 uniform float u_vmax;
+uniform vec4  u_bgColor;
 
 out vec4 fragColor;
 
@@ -37,7 +38,7 @@ void main() {
   float row = u_offset.y + pos.y / u_cellSize.y;
 
   if (col < 0.0 || col >= u_dataSize.x || row < 0.0 || row >= u_dataSize.y) {
-    fragColor = vec4(0.06, 0.06, 0.10, 1.0);
+    fragColor = u_bgColor;
     return;
   }
 

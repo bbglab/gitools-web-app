@@ -5,6 +5,7 @@ interface Props {
   results: RowResult[]
   onGeneClick: (rowIndex: number) => void
   hasPValue: boolean
+  isDark: boolean
 }
 
 const W = 340
@@ -16,7 +17,7 @@ function safeLog10(v: number): number {
   return -Math.log10(v)
 }
 
-export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
+export function VolcanoPlot({ results, onGeneClick, hasPValue, isDark }: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const pointsRef  = useRef<{ x: number; y: number; r: RowResult }[]>([])
 
@@ -32,13 +33,12 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
     ctx.scale(dpr, dpr)
 
     ctx.clearRect(0, 0, W, H)
-    ctx.fillStyle = '#0a0a12'
+    ctx.fillStyle = isDark ? '#0a0a12' : '#ffffff'
     ctx.fillRect(0, 0, W, H)
 
     const pW = W - PAD.left - PAD.right
     const pH = H - PAD.top  - PAD.bottom
 
-    // Avoid spread-into-Math.min/max — fails silently on large arrays (stack limit)
     let xMin = Infinity, xMax = -Infinity, yMax = 0
     const ys: number[] = new Array(results.length)
     for (let i = 0; i < results.length; i++) {
@@ -55,25 +55,24 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
     if (!isFinite(xMin)) return
     if (yMax === 0) yMax = 1
 
-    const yMin = 0
-
+    const yMin   = 0
     const xRange = xMax - xMin || 1
     const yRange = yMax - yMin || 1
 
     const toCanvasX = (v: number) => PAD.left + ((v - xMin) / xRange) * pW
     const toCanvasY = (v: number) => PAD.top  + pH - ((v - yMin) / yRange) * pH
 
-    // Grid lines
-    ctx.strokeStyle = '#1f1f3a'
+    // Grid baseline
+    ctx.strokeStyle = isDark ? '#1f1f3a' : '#e5e7eb'
     ctx.lineWidth   = 0.5
     ctx.beginPath()
     ctx.moveTo(PAD.left, toCanvasY(0))
     ctx.lineTo(PAD.left + pW, toCanvasY(0))
     ctx.stroke()
+
     if (hasPValue) {
-      // Significance threshold at FDR = 0.05 → -log10 = 1.3
       const sigY = toCanvasY(1.301)
-      ctx.strokeStyle = '#3b3b6a'
+      ctx.strokeStyle = isDark ? '#3b3b6a' : '#d1d5db'
       ctx.setLineDash([3, 3])
       ctx.beginPath()
       ctx.moveTo(PAD.left, sigY)
@@ -95,12 +94,12 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
 
       const significant = hasPValue && r.fdr <= SIG_FDR
       let color: string
-      if (!hasPValue)    color = '#6366f1'
-      else if (!significant) color = '#374151'
+      if (!hasPValue)        color = '#6366f1'
+      else if (!significant) color = isDark ? '#374151' : '#d1d5db'
       else if (r.score > 0)  color = '#3b82f6'
       else                   color = '#ef4444'
 
-      ctx.fillStyle = color
+      ctx.fillStyle  = color
       ctx.globalAlpha = significant || !hasPValue ? 0.9 : 0.4
       ctx.beginPath()
       ctx.arc(cx, cy, significant ? 2.5 : 1.5, 0, Math.PI * 2)
@@ -111,7 +110,7 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
     }
 
     // Axes
-    ctx.strokeStyle = '#374151'
+    ctx.strokeStyle = isDark ? '#374151' : '#d1d5db'
     ctx.lineWidth   = 1
     ctx.beginPath()
     ctx.moveTo(PAD.left, PAD.top)
@@ -120,7 +119,7 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
     ctx.stroke()
 
     // Y-axis ticks + labels
-    ctx.fillStyle   = '#6b7280'
+    ctx.fillStyle = isDark ? '#6b7280' : '#9ca3af'
     ctx.font        = '9px monospace'
     ctx.textAlign   = 'right'
     const nYTicks = 4
@@ -144,7 +143,7 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
     }
 
     // Axis labels
-    ctx.fillStyle  = '#9ca3af'
+    ctx.fillStyle = isDark ? '#9ca3af' : '#6b7280'
     ctx.font       = '10px monospace'
     ctx.textAlign  = 'center'
     ctx.fillText('Score', PAD.left + pW / 2, H - 2)
@@ -153,7 +152,7 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
     ctx.rotate(-Math.PI / 2)
     ctx.fillText(hasPValue ? '−log₁₀(FDR)' : 'Rank', 0, 0)
     ctx.restore()
-  }, [results, hasPValue])
+  }, [results, hasPValue, isDark])
 
   useEffect(() => { draw() }, [draw])
 
@@ -180,6 +179,10 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
     a.click()
   }, [])
 
+  const pngBtnStyle: React.CSSProperties = isDark
+    ? { background: '#1e1e3a', color: '#9ca3af', border: '1px solid #374151' }
+    : { background: '#f5f5f5', color: '#6b7280', border: '1px solid #e0e0e0' }
+
   return (
     <div className="shrink-0 relative">
       <canvas
@@ -192,7 +195,7 @@ export function VolcanoPlot({ results, onGeneClick, hasPValue }: Props) {
         onClick={downloadPNG}
         title="Download volcano plot as PNG"
         className="absolute top-1 right-1 text-[10px] font-mono px-1.5 py-0.5 rounded opacity-40 hover:opacity-100 transition-opacity"
-        style={{ background: '#1e1e3a', color: '#9ca3af', border: '1px solid #374151' }}
+        style={pngBtnStyle}
       >
         ↓ PNG
       </button>

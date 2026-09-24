@@ -9,7 +9,7 @@ export function AppShell({ children, onBack }: AppShellProps) {
   return (
     <div className="flex flex-col h-full bg-[--color-bg]">
       {/* Toolbar */}
-      <header className="flex items-center gap-3 px-4 h-10 shrink-0 border-b border-[--color-border] bg-[--color-surface]">
+      <header className="flex items-center gap-3 px-4 h-12 shrink-0 border-b border-[--color-border] bg-[--color-surface]">
         {onBack && (
           <button
             onClick={onBack}
@@ -18,11 +18,9 @@ export function AppShell({ children, onBack }: AppShellProps) {
             ← Back
           </button>
         )}
-        <span className="font-mono font-semibold text-sm tracking-wide text-[--color-accent]">
-          gitools-web
-        </span>
-        <span className="text-xs text-[--color-text-muted] ml-1">
-          genomics matrix explorer
+        <img src="/logo.png" alt="Gitools" className="h-8 w-auto" />
+        <span className="text-xs text-[--color-text-muted]">
+          interactive heatmap explorer
         </span>
       </header>
 

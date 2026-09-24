@@ -35,6 +35,7 @@ interface Props {
   progress: number
   onRun: () => void
   onClose: () => void
+  isDark: boolean
 }
 
 export function GroupBuilder({
@@ -45,6 +46,7 @@ export function GroupBuilder({
   correction, onCorrectionChange,
   running, progress,
   onRun, onClose,
+  isDark,
 }: Props) {
   const vec = colAnnotVecs.find(v => v.name === selectedField)
 
@@ -54,11 +56,19 @@ export function GroupBuilder({
 
   const canRun = groupACount > 0 && groupBCount > 0 && !running
 
+  const headerBg  = isDark ? '#10101e' : '#f5f5f5'
+  const btnIdleBorder = isDark ? '#374151' : '#d1d5db'
+  const btnIdleColor  = isDark ? '#4b5563' : '#9ca3af'
+
+  const runBtn = canRun
+    ? { background: isDark ? '#3730a3' : '#2563eb', color: isDark ? '#c7d2fe' : '#ffffff', border: isDark ? '#4338ca' : '#1d4ed8' }
+    : { background: isDark ? '#1e1e3a' : '#e5e7eb', color: isDark ? '#4b5563' : '#9ca3af', border: isDark ? '#4338ca' : '#d1d5db' }
+
   return (
     <div className="flex flex-col text-xs font-mono text-[--color-text]">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[--color-border] shrink-0"
-        style={{ background: '#10101e' }}>
+        style={{ background: headerBg }}>
         <span className="font-semibold text-sm text-[--color-accent]">Compare Groups</span>
         <button onClick={onClose}
           className="text-[--color-text-muted] hover:text-[--color-text] text-base leading-none px-1">×</button>
@@ -103,16 +113,16 @@ export function GroupBuilder({
                       className="w-6 h-5 rounded text-[10px] font-bold shrink-0 transition-colors"
                       style={{
                         background: grp === 'A' ? '#2563eb' : 'transparent',
-                        color:      grp === 'A' ? '#fff'    : '#4b5563',
-                        border: `1px solid ${grp === 'A' ? '#3b82f6' : '#374151'}`,
+                        color:      grp === 'A' ? '#fff'    : btnIdleColor,
+                        border: `1px solid ${grp === 'A' ? '#3b82f6' : btnIdleBorder}`,
                       }}>A</button>
                     <button
                       onClick={() => onAssign(val, grp === 'B' ? null : 'B')}
                       className="w-6 h-5 rounded text-[10px] font-bold shrink-0 transition-colors"
                       style={{
                         background: grp === 'B' ? '#dc2626' : 'transparent',
-                        color:      grp === 'B' ? '#fff'    : '#4b5563',
-                        border: `1px solid ${grp === 'B' ? '#ef4444' : '#374151'}`,
+                        color:      grp === 'B' ? '#fff'    : btnIdleColor,
+                        border: `1px solid ${grp === 'B' ? '#ef4444' : btnIdleBorder}`,
                       }}>B</button>
                     <span className="truncate flex-1 text-[--color-text-muted]" title={val}>{val}</span>
                   </div>
@@ -162,10 +172,10 @@ export function GroupBuilder({
             disabled={!canRun}
             className="w-full py-1.5 rounded text-xs font-semibold transition-colors"
             style={{
-              background: canRun ? '#3730a3' : '#1e1e3a',
-              color:      canRun ? '#c7d2fe' : '#4b5563',
-              border: '1px solid #4338ca',
-              cursor: canRun ? 'pointer' : 'not-allowed',
+              background:  runBtn.background,
+              color:       runBtn.color,
+              border:      `1px solid ${runBtn.border}`,
+              cursor:      canRun ? 'pointer' : 'not-allowed',
             }}
           >
             {running ? 'Running…' : 'Run comparison'}
