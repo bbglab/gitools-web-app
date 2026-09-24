@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
 
+  // Base path for GitHub Pages — must match the repo name
+  base: '/gitools-web-app/',
+
   // DuckDB-WASM must not be pre-bundled by Vite — it manages its own WASM loading
   optimizeDeps: {
     exclude: ['@duckdb/duckdb-wasm'],
