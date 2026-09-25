@@ -14,7 +14,7 @@ import { writeGctV12, downloadText } from '../../io/GctWriter'
 import {
   buildSession, downloadSession, parseSessionFile,
   encodeHashState, parseHashState,
-  serializeIdFilter, deserializeIdFilter,
+  serializeIdFilter,
 } from '../../io/sessionIO'
 import type { GitoolsSession } from '../../io/sessionIO'
 import { GroupBuilder, TEST_OPTIONS } from '../comparison/GroupBuilder'
@@ -857,10 +857,13 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
       setCustomColors(new Map(vs.customColors.map(([k, v]) => [k, new Map(v)])))
       setRowFilters(new Map(vs.rowFilters.map(([k, v]) => [k, new Set(v)])))
       setColFilters(new Map(vs.colFilters.map(([k, v]) => [k, new Set(v)])))
-      setRowValueFilters(vs.rowValueFilters)
-      setColValueFilters(vs.colValueFilters)
-      setRowIdFilter(deserializeIdFilter(vs.rowIdFilter))
-      setColIdFilter(deserializeIdFilter(vs.colIdFilter))
+      // Value filters and ID-list filters are temporary search tools — deliberately
+      // not restored, because they commonly cause an "empty" view when the IDs or
+      // thresholds no longer match the freshly loaded dataset.
+      setRowValueFilters([])
+      setColValueFilters([])
+      setRowIdFilter(null)
+      setColIdFilter(null)
       setTexVersion(v => v + 1)
       setViewState(prev => ({ ...prev, rowOffset: 0, colOffset: 0 }))
     } catch (err) {
