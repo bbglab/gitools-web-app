@@ -1216,6 +1216,7 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
           <button
             onClick={() => setSidebarOpen(o => !o)}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text]"
+            title="Toggle annotation sidebar — drag a TSV or CLS file onto it to add row or column annotations"
           >
             {sidebarOpen ? '◀ Annotations' : '▶ Annotations'}
           </button>
@@ -1226,6 +1227,7 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
                 const s = i === activeSeries ? theme.seriesActive : theme.seriesIdle
                 return (
                   <button key={i} onClick={() => setActiveSeries(i)}
+                    title={`Switch heatmap coloring to the "${name}" data layer`}
                     className="px-2 py-0.5 rounded text-xs font-mono transition-colors"
                     style={{ background: s.background, color: s.color, border: `1px solid ${s.borderColor}` }}>
                     {name}
@@ -1240,11 +1242,13 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
             placeholder="Search gene…"
             value={search}
             onChange={e => handleSearch(e.target.value)}
+            title="Type a gene name to highlight matching rows and scroll to the first match"
             className="px-2 py-0.5 rounded text-xs font-mono bg-[--color-bg] text-[--color-text] outline-none w-36"
             style={{ border: `1px solid ${searchBorderColor}` }}
           />
           <button
             onClick={() => setFilterPanelOpen(o => !o)}
+            title="Filter rows or columns by value, % empty, or an ID list"
             className="text-xs px-2 py-0.5 rounded border transition-colors"
             style={filterPanelOpen
               ? { background: theme.cmpActive.background, color: theme.cmpActive.color, borderColor: theme.cmpActive.borderColor }
@@ -1259,6 +1263,7 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
           </button>
           <button
             onClick={() => setCompareOpen(o => !o)}
+            title="Define Group A and Group B from an annotation field, then run a statistical test per gene"
             className="text-xs px-2 py-0.5 rounded border transition-colors"
             style={compareOpen
               ? { background: theme.cmpActive.background, color: theme.cmpActive.color, borderColor: theme.cmpActive.borderColor }
@@ -1278,28 +1283,28 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
               setExportOpen(o => !o)
             }}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
-            title="Export heatmap as PNG"
+            title="Download the heatmap as a PNG image — set pixel dimensions in the dialog. Exports the active series, current filtered view."
           >
             ↓ Export PNG
           </button>
           <button
             onClick={exportGct}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
-            title="Export current view (filtered rows/cols, active series) as GCT v1.2"
+            title="Download the current filtered view as a GCT v1.2 file (tab-separated matrix). Exports the active series only, visible rows and columns in their current sort order. Open in Morpheus, GSEA, R, or Python."
           >
             ↓ Export GCT
           </button>
           <button
             onClick={saveSession}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
-            title="Save session — annotations, sort order, filters, and view settings"
+            title="Save view state to a JSON file: sort order, annotation tracks, color settings, and annotation-based filters. Does NOT save the matrix data — reload your data file before restoring a session."
           >
             ↓ Save Session
           </button>
           <button
             onClick={() => sessionFileRef.current?.click()}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
-            title="Load session JSON (restores annotations, sort order, filters, and view settings)"
+            title="Restore a saved session JSON. You must load your data file first — the session restores sort order, annotations, colors, and filters, but not the matrix values."
           >
             ↑ Load Session
           </button>

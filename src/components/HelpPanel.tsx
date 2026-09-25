@@ -152,16 +152,17 @@ export function HelpPanel({ onClose, isDark }: Props) {
 
               <Section title="8. Export data" accent={accent} border={border}>
                 <p>Three export options are available in the toolbar:</p>
-                <ul className="list-disc ml-4 mt-1 flex flex-col gap-1" style={{ color: muted }}>
+                <ul className="list-disc ml-4 mt-1 flex flex-col gap-1.5" style={{ color: muted }}>
                   <li>
                     <b style={{ color: text }}>↓ Export PNG</b> — renders the heatmap to a PNG image.
                     A dialog lets you set the output width and height (in pixels) and choose a white or dark background.
-                    The image always shows the full set of currently visible rows and columns (after filters), at full resolution regardless of screen zoom.
+                    Always exports the full set of currently visible rows and columns (after filters), at full resolution regardless of screen zoom.
                   </li>
                   <li>
                     <b style={{ color: text }}>↓ Export GCT</b> — downloads a GCT v1.2 file of the current view:
-                    the filtered rows and columns in their current sort order, using the active data series.
-                    The file can be opened in any tool that reads GCT format (Morpheus, GSEA, R/Python).
+                    the filtered rows and columns in their current sort order, using the <i>active series only</i>.
+                    The file can be opened in any tool that reads GCT format (Morpheus, GSEA, R, Python).
+                    <span style={{ color: text }}> Note: only one data series is exported per file. If you have multiple series, switch to each one and export separately.</span>
                   </li>
                   <li>
                     <b style={{ color: text }}>Export TSV</b> (in the Compare Groups results panel) — downloads the ranked gene table
@@ -170,21 +171,36 @@ export function HelpPanel({ onClose, isDark }: Props) {
                 </ul>
               </Section>
 
-              <Section title="9. Sessions — save and restore your work" accent={accent} border={border}>
-                <p>Sessions let you save your entire analysis state and reload it in a later visit — without having to redo sorting, filtering, or comparison setup.</p>
+              <Section title="9. Sessions — save and restore your view setup" accent={accent} border={border}>
+                <p>A session file saves your <b style={{ color: text }}>view setup</b> so you can restore it later — without having to redo sorting, annotations, or comparison setup from scratch.</p>
+
+                <p className="mt-2"><b style={{ color: text }}>Important: a session does NOT save the matrix data.</b></p>
+                <p className="mt-1" style={{ color: muted }}>
+                  The raw numbers (expression values, scores, etc.) are kept in your original data file,
+                  not in the session. A typical 20 000 × 300 matrix would make the session file 100+ MB — impractical to save or share.
+                  You must <b style={{ color: text }}>reload your data file first</b>, then load the session on top of it.
+                </p>
+
                 <p className="mt-2"><b>What a session saves:</b></p>
                 <ul className="list-disc ml-4 mt-1 flex flex-col gap-0.5" style={{ color: muted }}>
                   <li>All annotation fields (including any you drag-dropped or added from comparison results)</li>
                   <li>Sort order of rows and columns</li>
-                  <li>Active filters (annotation, value, ID-list)</li>
+                  <li>Annotation-based filters (e.g. "show only tissue = liver")</li>
                   <li>Visible annotation tracks, display modes, and custom category colors</li>
-                  <li>Color scale settings (preset, min/max overrides)</li>
+                  <li>Color scale preset and min/max overrides</li>
                   <li>Active series, dark/light mode</li>
                 </ul>
-                <p className="mt-2"><b>Note:</b> the raw matrix data is <i>not</i> stored in the session file — it is usually large. Load your data file first, then load the session on top to restore the view.</p>
+
+                <p className="mt-2"><b>What a session does NOT restore:</b></p>
+                <ul className="list-disc ml-4 mt-1 flex flex-col gap-0.5" style={{ color: muted }}>
+                  <li><b style={{ color: text }}>The matrix data</b> — reload your data file first</li>
+                  <li>ID-list filters and value filters — these are temporary search tools; clear and re-apply them after loading</li>
+                </ul>
+
                 <p className="mt-2"><b>To save:</b> click <b style={{ color: text }}>↓ Save Session</b>. A <code style={{ color: accent }}>.gitools.json</code> file is downloaded.</p>
-                <p className="mt-1"><b>To restore:</b> load the same data file first, then click <b style={{ color: text }}>↑ Load Session</b> and pick the saved JSON. The viewer validates that the file dimensions match before applying any changes.</p>
-                <p className="mt-2"><b>Shareable URL:</b> The URL automatically encodes your color scale preset, dark/light mode, and active series in the page hash (e.g. <code style={{ color: accent }}>#cmap=viridis&dark=1</code>). Bookmarking the URL or sharing it preserves those visual preferences — but the data file still needs to be re-loaded.</p>
+                <p className="mt-1"><b>To restore:</b> load the same data file first, then click <b style={{ color: text }}>↑ Load Session</b> and pick the JSON. The viewer checks that dimensions match before applying anything.</p>
+
+                <p className="mt-2"><b>Shareable URL:</b> The URL hash automatically encodes your color scale, dark/light mode, and active series (e.g. <code style={{ color: accent }}>#cmap=viridis&dark=1</code>). Bookmarking or sharing the URL preserves those visual preferences — but the data file still needs to be re-loaded.</p>
               </Section>
 
             </div>
