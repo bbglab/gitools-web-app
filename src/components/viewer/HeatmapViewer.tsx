@@ -1297,14 +1297,14 @@ export function HeatmapViewer({ dataset, onDarkModeChange }: { dataset: Dataset;
           <button
             onClick={saveSession}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
-            title="Save view state to a JSON file: sort order, annotation tracks, color settings, and annotation-based filters. Does NOT save the matrix data — reload your data file before restoring a session."
+            title="Saves view setup only (sort order, annotations, colors, filters). The matrix data is NOT saved — to restore this session later, load the same data file first, then load this JSON on top."
           >
             ↓ Save Session
           </button>
           <button
             onClick={() => sessionFileRef.current?.click()}
             className="text-xs px-2 py-0.5 rounded border border-[--color-border] text-[--color-text-muted] hover:text-[--color-text] transition-colors"
-            title="Restore a saved session JSON. You must load your data file first — the session restores sort order, annotations, colors, and filters, but not the matrix values."
+            title="Restores view setup from a session JSON (sort order, annotations, colors, filters). The matrix data is not in the session — load the corresponding data file first, then load the session on top."
           >
             ↑ Load Session
           </button>
